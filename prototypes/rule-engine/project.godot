@@ -1,0 +1,7 @@
+; PROTOTYPE - NOT FOR PRODUCTION
+; Question: ルール札の組み合わせだけで3ルールが動き、どんな組み合わせでも止まらず終わり、1手0.5秒以内か
+; Date: 2026-11-23
+config_version=5
+
+[application]
+config/name="rule-engine-prototype"

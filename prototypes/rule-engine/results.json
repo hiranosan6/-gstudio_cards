@@ -1,0 +1,93 @@
+{
+  "7ならべ": {
+    "avg_finished_players": 2.69,
+    "avg_turns": 50.43,
+    "games": 100,
+    "max_decision_usec": 399,
+    "results": {
+      "finished": 100
+    }
+  },
+  "でたらめな組み合わせ": {
+    "avg_turns": 480.647,
+    "by_minimum_set": {
+      "揃っている": {
+        "finished": 200,
+        "n": 396
+      },
+      "欠けている": {
+        "finished": 58,
+        "n": 604
+      }
+    },
+    "elapsed_msec": 5623,
+    "examples": {
+      "draw_turn_limit": [
+        "add_jokers",
+        "place_on_field",
+        "act_draw_from_next",
+        "cond_same_count",
+        "cond_adjacent",
+        "flow_clear_on_all_pass",
+        "flow_discard_pairs"
+      ],
+      "finished": [
+        "deal_all",
+        "add_jokers",
+        "place_on_field",
+        "act_play",
+        "act_draw_from_next",
+        "cond_same_count",
+        "win_empty_hand",
+        "win_ranking",
+        "lose_holding_last"
+      ],
+      "stalemate": [
+        "deal_all",
+        "add_jokers",
+        "act_play",
+        "act_pass",
+        "cond_stronger",
+        "cond_same_count",
+        "order_daifugo",
+        "cond_adjacent",
+        "flow_clear_on_all_pass",
+        "flow_discard_pairs",
+        "win_ranking"
+      ]
+    },
+    "fail_tags": {
+      "その他": 74,
+      "ジョーカーが並べられない": 42,
+      "引くのみ・ペア無し": 25,
+      "強い札のみ・流れ無し": 17,
+      "隣の数字・始点無し": 38
+    },
+    "games": 1000,
+    "max_decision_usec": 2216,
+    "results": {
+      "draw_turn_limit": 385,
+      "error_conservation": 0,
+      "finished": 258,
+      "stalemate": 357
+    }
+  },
+  "ババ抜き": {
+    "avg_finished_players": 3.0,
+    "avg_turns": 40.04,
+    "games": 100,
+    "max_decision_usec": 18,
+    "results": {
+      "finished": 100
+    }
+  },
+  "大富豪": {
+    "avg_finished_players": 3.0,
+    "avg_turns": 71.15,
+    "games": 100,
+    "max_decision_usec": 120,
+    "results": {
+      "finished": 100
+    }
+  }
+}
