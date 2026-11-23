@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: ""
+last_updated: "2026-11-23"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -48,7 +48,167 @@ last_updated: ""
 # Attribute fields: any key stats that could appear in another GDD
 #   (health, damage, drops, faction, etc.)
 
-entities: []
+entities:
+  - name: deal_all
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 配り方
+      display_name: 全部配る
+    added: 2026-11-23
+  - name: add_jokers
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 配り方
+      display_name: ジョーカー入り
+    added: 2026-11-23
+  - name: place_on_field
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 配り方
+      display_name: 最初に並べる
+    added: 2026-11-23
+  - name: act_play
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 手番の行動
+      display_name: 出す
+    added: 2026-11-23
+  - name: act_pass
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 手番の行動
+      display_name: パス
+    added: 2026-11-23
+  - name: act_draw_from_next
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 手番の行動
+      display_name: 隣から引く
+    added: 2026-11-23
+  - name: cond_stronger
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 出せる条件
+      display_name: 強い札だけ
+    added: 2026-11-23
+  - name: cond_same_count
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 出せる条件
+      display_name: 同じ枚数
+    added: 2026-11-23
+  - name: order_daifugo
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 出せる条件
+      display_name: 2が最強
+    added: 2026-11-23
+  - name: cond_adjacent
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 出せる条件
+      display_name: 隣の数字
+    added: 2026-11-23
+  - name: flow_clear_on_all_pass
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 場の流れ
+      display_name: パスで流す
+    added: 2026-11-23
+  - name: flow_discard_pairs
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 場の流れ
+      display_name: ペアを捨てる
+    added: 2026-11-23
+  - name: win_empty_hand
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 上がり条件
+      display_name: 手札0で上がり
+    added: 2026-11-23
+  - name: win_ranking
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 上がり条件
+      display_name: 順位を付ける
+    added: 2026-11-23
+  - name: lose_on_pass_limit
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 上がり条件
+      display_name: パスで負け
+    added: 2026-11-23
+  - name: lose_holding_last
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    attributes:
+      kind: rule_card
+      category: 上がり条件
+      display_name: 最後は負け
+    added: 2026-11-23
 
 # Example (remove when first real entry is added):
 #
@@ -106,7 +266,25 @@ items: []
 #   output_range[min, max], added
 # Optional: expression (the actual formula), notes
 
-formulas: []
+formulas:
+  - name: card_strength_default
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    expression: "strength = rank (joker = 14)"
+    variables: [rank]
+    output_range: "1-14"
+    added: 2026-11-23
+  - name: card_strength_daifugo
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    expression: "strength = (rank + 10) mod 13 (joker = 13)"
+    variables: [rank]
+    output_range: "0-13"
+    added: 2026-11-23
 
 # Example:
 #
@@ -139,7 +317,31 @@ formulas: []
 #
 # Required fields: name, status, source, referenced_by, value, unit, added
 
-constants: []
+constants:
+  - name: joker_count_default
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    value: 1
+    range: "1-2"
+    added: 2026-11-23
+  - name: place_on_field_rank_default
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    value: 7
+    range: "1-13"
+    added: 2026-11-23
+  - name: pass_limit_default
+    status: active
+    source: design/gdd/rule-card-definition.md
+    referenced_by:
+      - design/gdd/rule-card-definition.md
+    value: 3
+    range: "1-5"
+    added: 2026-11-23
 
 # Example:
 #
