@@ -267,11 +267,21 @@ items: []
 # Optional: expression (the actual formula), notes
 
 formulas:
+  - name: card_sort_order
+    status: active
+    source: design/gdd/playing-card-definition.md
+    referenced_by:
+      - design/gdd/playing-card-definition.md
+    expression: "order = suit_index * 13 + (rank - 1); suits S=0 H=1 D=2 C=3; joker_black=52, joker_red=53"
+    variables: [suit_index, rank]
+    output_range: "0-53"
+    added: 2026-11-23
   - name: card_strength_default
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
       - design/gdd/rule-card-definition.md
+      - design/gdd/playing-card-definition.md
     expression: "strength = rank (joker = 14)"
     variables: [rank]
     output_range: "1-14"
@@ -318,6 +328,15 @@ formulas:
 # Required fields: name, status, source, referenced_by, value, unit, added
 
 constants:
+  - name: deck_size_base
+    status: active
+    source: design/gdd/playing-card-definition.md
+    referenced_by:
+      - design/gdd/playing-card-definition.md
+      - design/gdd/rule-card-definition.md
+    value: 52
+    note: "jokers: black first, then red (max 2)"
+    added: 2026-11-23
   - name: joker_count_default
     status: active
     source: design/gdd/rule-card-definition.md
