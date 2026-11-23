@@ -1,7 +1,5 @@
 # 作業の現在地
-
-- 作業: 仕組みの分解(/map-systems)
-- 状態: 仕組みの一覧を作成済み
-- ファイル: design/gdd/systems-index.md
-- 次: 仕組みごとの設計書(/design-system トランプの定義)
-- 見直し頻度: lean
+- 作業: ルール札の定義の設計書(/design-system)
+- 現在の章: ひな形を作成
+- ファイル: design/gdd/rule-card-definition.md
+- 決定: トランプの定義は仮の約束/調整値は札の上で変える/1種類1枚/相性は札の定義に持たせる
