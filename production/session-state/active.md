@@ -1,5 +1,4 @@
 # 作業の現在地
-- 作業: ルール札の定義の設計書(/design-system)
-- 現在の章: ひな形を作成
+- 作業: ルール札の定義の設計書 完成(確認待ち)
 - ファイル: design/gdd/rule-card-definition.md
-- 決定: トランプの定義は仮の約束/調整値は札の上で変える/1種類1枚/相性は札の定義に持たせる
+- 次: /design-review design/gdd/rule-card-definition.md、または次の仕組み(トランプの定義/ルールの形式)
