@@ -1,0 +1,1595 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE - NOT FOR PRODUCTION
+  問い: 「ルール札を1枚入れ替える → すぐ対戦 → 手応えを見る → 直す」の繰り返しは楽しいか(柱2「3秒で試せる」)
+  日付: 2026-11-23
+  本番のコードから参照・流用しないこと。進行の考え方は prototypes/rule-engine/proto_engine.gd を JavaScript に移したもの。
+-->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ルール工房 確認用の模型</title>
+<style>
+:root {
+  --felt: #1F5A3D;
+  --felt-dark: #174630;
+  --wood: #6B4A2E;
+  --wood-dark: #4E3520;
+  --paper: #F5F0E6;
+  --paper-shade: #E4DCCB;
+  --red: #B3262E;
+  --black: #1E1E1E;
+  --gold: #C9A24A;
+  --warn: #E58E1A;
+  --c-deal: #3B5B8C;
+  --c-action: #C2703D;
+  --c-cond: #6E4C8C;
+  --c-flow: #2F7F7A;
+  --c-win: #8C2F45;
+  /* トランプの幅。ルール札はこの1.25倍 */
+  --pc-w: 64px;
+  --tap: 44px;
+  --font: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Noto Sans JP", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--wood-dark);
+  color: var(--paper);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+button { font-family: inherit; }
+.hidden { display: none !important; }
+
+/* 卓(羅紗と木枠) */
+.table {
+  margin: 8px;
+  min-height: calc(100vh - 16px);
+  border: 10px solid var(--wood);
+  border-radius: 18px;
+  background-color: var(--felt);
+  background-image:
+    radial-gradient(ellipse at 50% 40%, rgba(255,255,255,0.07), rgba(0,0,0,0.18) 75%),
+    repeating-linear-gradient(45deg, rgba(0,0,0,0.035) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 4px);
+  box-shadow: inset 0 0 0 2px var(--wood-dark), 0 4px 10px rgba(0,0,0,0.4);
+  padding: 12px 12px 96px;
+  position: relative;
+}
+@media (max-width: 520px) {
+  .table { margin: 4px; border-width: 6px; padding: 8px 8px 96px; min-height: calc(100vh - 8px); }
+}
+#screen-workshop .table { --pc-w: 92px; }
+@media (max-width: 520px) { #screen-workshop .table { --pc-w: 88px; } }
+
+h1, h2, h3 { margin: 0; font-weight: 700; }
+h1 { font-size: 20px; }
+h2 { font-size: 17px; margin: 14px 0 6px; }
+.note { font-size: 13px; opacity: 0.85; }
+
+/* 厚紙のタグの形のボタン */
+.tag {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px 14px 14px 6px;
+  background: var(--paper);
+  color: var(--black);
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 3px 0 var(--paper-shade), 0 4px 6px rgba(0,0,0,0.35);
+  cursor: pointer;
+  transition: transform 0.08s, box-shadow 0.08s;
+  position: relative;
+}
+.tag::before {
+  content: ""; position: absolute; left: 7px; top: 50%; width: 7px; height: 7px; margin-top: -3.5px;
+  border-radius: 50%; background: var(--felt-dark); opacity: 0.55;
+}
+.tag { padding-left: 22px; }
+.tag:active, .tag.pressed { transform: translateY(2px); box-shadow: 0 1px 0 var(--paper-shade), 0 2px 3px rgba(0,0,0,0.35); }
+.tag:disabled { opacity: 0.45; cursor: default; transform: none; }
+.tag.play { background: var(--gold); box-shadow: 0 3px 0 #9C7C33, 0 4px 6px rgba(0,0,0,0.35); }
+.tag.wood { background: var(--wood); color: var(--paper); box-shadow: 0 3px 0 var(--wood-dark), 0 4px 6px rgba(0,0,0,0.35); }
+.tag.wood::before { background: var(--paper); }
+.tag.on { outline: 3px solid var(--gold); outline-offset: 1px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* 測った時間(画面の隅) */
+#timing {
+  position: fixed; right: 6px; top: 4px; z-index: 50;
+  font-size: 12px; line-height: 1.3; text-align: right;
+  background: rgba(0,0,0,0.45); color: var(--paper);
+  padding: 3px 7px; border-radius: 6px; pointer-events: none; max-width: 60vw;
+}
+
+/* ===== 工房 ===== */
+.ws-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; padding-right: 120px; }
+@media (max-width: 520px) { .ws-head { padding-right: 0; padding-top: 26px; } }
+.rule-name { font-size: 15px; color: var(--paper); opacity: 0.9; }
+.panel {
+  background: rgba(0,0,0,0.16);
+  border-radius: 10px; padding: 8px 10px; margin-top: 10px;
+}
+.message { font-size: 14px; min-height: 1.4em; margin-top: 6px; }
+.message.bad { color: #FFD2A0; }
+
+.warn-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.warn-list li {
+  background: var(--warn); color: var(--black);
+  border-radius: 8px; padding: 6px 10px 6px 36px; position: relative; font-size: 14px; font-weight: 700;
+}
+.warn-list li::before {
+  content: "!"; position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border-radius: 50%; background: var(--black); color: var(--warn);
+  text-align: center; line-height: 20px; font-size: 14px;
+}
+.warn-ok { font-size: 14px; opacity: 0.85; margin-top: 6px; }
+
+/* ルール盤: 5分類の列 */
+.board {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;
+  background: rgba(0,0,0,0.12); border: 2px dashed rgba(245,240,230,0.25);
+  border-radius: 12px; padding: 8px;
+}
+.board-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.col-head {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 4px;
+  font-size: 14px; font-weight: 700; padding: 4px 2px; border-radius: 6px; color: #fff;
+}
+.col-head svg { width: 18px; height: 18px; flex: none; }
+.col-empty { font-size: 13px; opacity: 0.6; padding: 10px 0; text-align: center; }
+.col-cards { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+@media (max-width: 900px) {
+  .board { grid-template-columns: 1fr; }
+  .board-col { align-items: stretch; }
+  .col-head { justify-content: flex-start; padding-left: 10px; }
+  .col-cards { flex-direction: row; flex-wrap: wrap; align-items: flex-start; }
+  .col-empty { padding: 2px 6px; }
+}
+
+/* 札箱 */
+.box {
+  background: var(--wood); border-radius: 12px; padding: 8px;
+  box-shadow: inset 0 0 0 3px var(--wood-dark);
+}
+.box-group { margin-bottom: 6px; }
+.box-group-head { font-size: 14px; font-weight: 700; margin: 2px 0 6px; display: flex; align-items: center; gap: 4px; }
+.box-group-head svg { width: 16px; height: 16px; }
+.box-cards { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ルール札(トランプの1.25倍) */
+.rcard {
+  width: calc(var(--pc-w) * 1.25); min-height: calc(var(--pc-w) * 1.25 * 1.4);
+  background: var(--paper); color: var(--black);
+  border-radius: 12px; overflow: visible; position: relative;
+  box-shadow: 0 2px 0 var(--paper-shade), 0 3px 6px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; text-align: center;
+  border: 0; padding: 0; font: inherit; cursor: pointer;
+  transition: transform 0.15s;
+}
+.rcard:active { transform: translateY(2px); }
+.rcard .band {
+  height: 26px; border-radius: 12px 12px 0 0; color: #fff;
+  display: flex; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 700;
+}
+.rcard .band svg { width: 16px; height: 16px; }
+.rcard .rname { font-size: 14px; font-weight: 800; margin: 8px 4px 2px; line-height: 1.25; }
+.rcard .rdesc { font-size: 11px; margin: 2px 6px 6px; line-height: 1.35; opacity: 0.85; }
+.rcard .rval { font-size: 13px; font-weight: 700; margin-top: auto; }
+.rcard .rval b { display: inline-block; min-width: 24px; border: 2px solid var(--black); border-radius: 4px; padding: 0 3px; }
+.rcard .knobs { display: flex; justify-content: space-between; padding: 2px 0 0; }
+.knob {
+  width: var(--tap); height: var(--tap); border: 0; border-radius: 50%;
+  background: var(--wood); color: var(--paper); font-size: 22px; font-weight: 800; line-height: 1;
+  cursor: pointer; box-shadow: inset 0 -3px 0 var(--wood-dark);
+}
+.knob:disabled { opacity: 0.35; cursor: default; }
+.rcard .act { font-size: 11px; padding: 0 0 6px; opacity: 0.75; margin-top: auto; }
+.rcard.has-param .act { margin-top: 0; }
+.rcard.in-box-placed {
+  background: transparent; color: var(--paper); box-shadow: none;
+  border: 2px dashed rgba(245,240,230,0.5);
+}
+.rcard.in-box-placed .band { opacity: 0.4; }
+.rcard .badge {
+  position: absolute; right: -6px; top: -8px; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--warn); color: var(--black); font-weight: 900; font-size: 17px; line-height: 26px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.5); text-align: center;
+}
+.rcard.warned { box-shadow: 0 0 0 3px var(--warn), 0 3px 6px rgba(0,0,0,0.35); }
+.unusable { margin-top: 8px; font-size: 13px; }
+.unusable span { display: inline-block; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 2px 8px; margin: 2px; }
+
+/* 下の固定の帯 */
+.bottom-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: var(--wood); border-top: 3px solid var(--wood-dark);
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+  display: flex; gap: 10px; align-items: center; justify-content: space-between;
+}
+.bottom-bar .summary { font-size: 14px; }
+.bottom-bar .tag.play { font-size: 18px; padding: 10px 26px 10px 30px; }
+
+details.json { margin-top: 8px; font-size: 13px; }
+details.json summary { cursor: pointer; min-height: var(--tap); display: flex; align-items: center; }
+details.json pre {
+  white-space: pre-wrap; word-break: break-all; background: rgba(0,0,0,0.3);
+  padding: 8px; border-radius: 6px; margin: 0; font-size: 12px;
+}
+
+/* ===== 対戦 ===== */
+#screen-battle .table { --pc-w: 64px; padding-bottom: 12px; }
+@media (max-width: 520px) { #screen-battle .table { --pc-w: 58px; } }
+.bt-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-right: 130px; }
+@media (max-width: 520px) { .bt-head { padding-right: 0; padding-top: 26px; } }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 10px; color: #fff; font-weight: 700; }
+
+.arena {
+  display: grid; gap: 8px; margin-top: 10px;
+  grid-template-columns: 130px minmax(0, 1fr) 130px;
+  grid-template-areas: ". top ." "left field right";
+  align-items: center;
+}
+.seat-top { grid-area: top; justify-self: center; }
+.seat-left { grid-area: left; }
+.seat-right { grid-area: right; }
+.field { grid-area: field; }
+@media (max-width: 700px) {
+  .arena .seat { padding: 4px 4px; }
+  .arena .seat .pos { display: none; }
+  .arena .seat .who { font-size: 12px; }
+  .arena .seat .backs { height: 12px; }
+  .arena .seat .backs i { height: 12px; width: 9px; margin-left: -6px; }
+  .arena .seat .cnt, .arena .seat .st { font-size: 12px; }
+  .field { min-height: 120px; }
+  .bt-head .tag { min-height: var(--tap); padding: 6px 10px 6px 20px; font-size: 14px; }
+  #timing { font-size: 11px; }
+  .arena { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "left top right" "field field field"; }
+  .seat-top { justify-self: stretch; }
+}
+/* 名札(札立て) */
+.seat {
+  background: var(--paper); color: var(--black); border-radius: 8px;
+  padding: 6px 8px; text-align: center; box-shadow: 0 3px 0 var(--paper-shade), 0 4px 6px rgba(0,0,0,0.35);
+  min-width: 0; transition: background 0.2s;
+}
+.seat .who { font-size: 14px; font-weight: 800; }
+.seat .pos { font-size: 11px; opacity: 0.7; }
+.seat .cnt { font-size: 14px; }
+.seat .st { font-size: 12px; font-weight: 700; min-height: 1.3em; }
+.seat.turn { background: var(--gold); box-shadow: 0 3px 0 #9C7C33, 0 0 0 3px #F1D98F, 0 4px 6px rgba(0,0,0,0.35); }
+.seat.gone { opacity: 0.6; }
+.backs { display: flex; justify-content: center; height: 22px; margin: 2px 0; }
+.backs i {
+  display: block; width: 14px; height: 20px; margin-left: -8px; border-radius: 2px;
+  background: var(--felt); border: 1px solid var(--gold);
+  background-image: repeating-linear-gradient(45deg, rgba(201,162,74,0.5) 0 1px, transparent 1px 4px);
+}
+.backs i:first-child { margin-left: 0; }
+
+.field {
+  min-height: 170px; background: rgba(0,0,0,0.14); border-radius: 12px;
+  border: 2px solid rgba(245,240,230,0.18); padding: 8px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+}
+.field-label { font-size: 14px; }
+.pile { display: flex; justify-content: center; min-height: calc(var(--pc-w) * 1.4); }
+.pile .pcard { margin-left: calc(var(--pc-w) * -0.45); animation: drop 0.2s ease-out; }
+.pile .pcard:first-child { margin-left: 0; }
+@keyframes drop { from { transform: translateY(-14px) scale(1.06); opacity: 0.3; } to { transform: none; opacity: 1; } }
+.field-sub { font-size: 12px; opacity: 0.85; }
+
+/* 7ならべの場 */
+.layout { display: grid; gap: 3px; width: 100%; max-width: 560px; }
+.lrow { display: grid; grid-template-columns: 22px repeat(13, minmax(0, 1fr)); gap: 2px; align-items: center; }
+.lsuit { font-size: 16px; font-weight: 700; }
+.lcell {
+  height: 34px; border-radius: 4px; border: 1px dashed rgba(245,240,230,0.25);
+  font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center;
+}
+.lcell.on { background: var(--paper); border: 0; box-shadow: 0 1px 2px rgba(0,0,0,0.4); animation: drop 0.2s ease-out; }
+.lcell.on.r { color: var(--red); }
+.lcell.on.k { color: var(--black); }
+
+.log { font-size: 14px; min-height: 2.9em; margin: 8px 0 4px; text-align: center; }
+.log .old { opacity: 0.6; font-size: 12px; display: block; }
+
+/* 自分の手札 */
+.me { margin-top: 6px; }
+.me-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: center; font-size: 14px; }
+.me-head .myturn { background: var(--gold); color: var(--black); border-radius: 6px; padding: 1px 8px; font-weight: 800; }
+.hand {
+  display: flex; flex-wrap: wrap; justify-content: center; padding: 18px 4px 4px;
+  row-gap: 6px;
+}
+.hand .pcard { margin-left: calc(var(--tap) - var(--pc-w)); }
+.hand .pcard:first-child { margin-left: 0; }
+@media (min-width: 900px) { .hand .pcard { margin-left: 4px; } }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; min-height: var(--tap); }
+
+/* トランプ */
+.pcard {
+  width: var(--pc-w); height: calc(var(--pc-w) * 1.4); flex: none;
+  background: var(--paper); border-radius: 7px; border: 0; padding: 0;
+  box-shadow: 0 1px 0 var(--paper-shade), 0 2px 4px rgba(0,0,0,0.4);
+  position: relative; font-family: inherit; cursor: default;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.pcard.r { color: var(--red); }
+.pcard.k { color: var(--black); }
+.pcard .ix { position: absolute; left: 4px; top: 3px; font-size: 14px; font-weight: 800; line-height: 1; text-align: center; }
+.pcard .ix small { display: block; font-size: 13px; }
+.pcard .ix2 { left: auto; top: auto; right: 4px; bottom: 3px; transform: rotate(180deg); }
+.pcard .mid { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); font-size: calc(var(--pc-w) * 0.42); text-align: center; line-height: 1; }
+.pcard .mid svg { width: 60%; height: auto; }
+.pcard .jk { position: absolute; left: 0; right: 0; bottom: 6px; font-size: 10px; font-weight: 800; text-align: center; }
+.pcard.can { cursor: pointer; transform: translateY(-12px); box-shadow: 0 0 0 3px var(--gold), 0 6px 8px rgba(0,0,0,0.45); }
+.pcard.sel { transform: translateY(-20px); box-shadow: 0 0 0 4px var(--gold), 0 0 0 7px var(--paper), 0 8px 10px rgba(0,0,0,0.5); }
+.pcard.dim { filter: brightness(0.86); }
+
+/* 結果 */
+.overlay {
+  position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center; padding: 12px;
+  animation: fade 0.25s ease-out;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.result {
+  background: var(--paper); color: var(--black); border-radius: 14px; width: min(520px, 100%);
+  max-height: calc(100vh - 24px); overflow-y: auto; padding: 16px 16px 14px;
+  box-shadow: 0 0 0 6px var(--wood), 0 8px 20px rgba(0,0,0,0.5);
+}
+.result h2 { font-size: 22px; margin: 0 0 4px; }
+.result .kind { display: inline-block; font-size: 13px; font-weight: 800; padding: 2px 10px; border-radius: 10px; color: #fff; }
+.kind.k-finished { background: var(--felt); }
+.kind.k-draw { background: var(--wood); }
+.kind.k-stalemate { background: var(--wood-dark); }
+.result ol, .result ul { margin: 8px 0; padding-left: 1.4em; }
+.result li { margin: 2px 0; }
+.result .me-row { font-weight: 800; }
+.hint { background: #FBE7C9; border-left: 6px solid var(--warn); border-radius: 6px; padding: 8px 10px; margin: 10px 0; font-size: 14px; }
+.hint h3 { font-size: 15px; margin-bottom: 4px; }
+.result .btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.result .btns .fix { font-size: 18px; padding: 12px 24px 12px 30px; background: var(--wood); color: var(--paper); box-shadow: 0 3px 0 var(--wood-dark), 0 0 0 3px var(--gold); }
+.result .btns .fix::before { background: var(--paper); }
+</style>
+</head>
+<body>
+<div id="timing" aria-live="polite">直してから最初の手番まで: まだ測っていません</div>
+
+<!-- 工房 -->
+<section id="screen-workshop">
+  <div class="table">
+    <div class="ws-head">
+      <h1>ルール工房 <span class="note">確認用の模型</span></h1>
+      <span class="rule-name" id="ws-rule-name"></span>
+    </div>
+
+    <div class="panel">
+      <div class="row" id="presets">
+        <span class="note">ひな形:</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="tag wood" id="btn-save">保存</button>
+        <button class="tag wood" id="btn-load">読み込み</button>
+        <button class="tag" id="btn-clear">全部外す</button>
+      </div>
+      <div class="message" id="ws-message" role="status"></div>
+    </div>
+
+    <h2>ルール盤 <span class="note">札を押すと外れます。「−」「＋」で数を変えます</span></h2>
+    <div id="warnings"></div>
+    <div class="board" id="board"></div>
+    <div class="unusable hidden" id="unusable"></div>
+
+    <h2>札箱 <span class="note">札を押すとルール盤に置きます</span></h2>
+    <div class="box" id="box"></div>
+
+    <details class="json">
+      <summary>保存する文字列を見る</summary>
+      <pre id="json-view"></pre>
+    </details>
+  </div>
+  <div class="bottom-bar">
+    <span class="summary" id="ws-summary"></span>
+    <button class="tag play" id="btn-battle">対戦 ▶</button>
+  </div>
+</section>
+
+<!-- 対戦 -->
+<section id="screen-battle" class="hidden">
+  <div class="table">
+    <div class="bt-head">
+      <button class="tag wood" id="btn-fix">工房に戻って直す</button>
+      <button class="tag" id="btn-speed">速さ: ふつう</button>
+      <button class="tag" id="btn-auto">自分もおまかせ: 切</button>
+    </div>
+    <div class="chips" id="bt-chips"></div>
+
+    <div class="arena">
+      <div class="seat seat-left" id="seat-1"></div>
+      <div class="seat seat-top" id="seat-2"></div>
+      <div class="seat seat-right" id="seat-3"></div>
+      <div class="field" id="field"></div>
+    </div>
+
+    <div class="log" id="log" aria-live="polite"></div>
+
+    <div class="me">
+      <div class="me-head" id="me-head"></div>
+      <div class="hand" id="hand"></div>
+      <div class="actions" id="actions"></div>
+    </div>
+  </div>
+  <div class="overlay hidden" id="overlay">
+    <div class="result" id="result" role="dialog" aria-modal="true" aria-labelledby="result-title"></div>
+  </div>
+</section>
+
+<script>
+"use strict";
+// PROTOTYPE - NOT FOR PRODUCTION
+
+// ---------------------------------------------------------------
+// データ: 分類・ルール札16枚・相性・ひな形
+// (design/gdd/rule-card-definition.md)
+// ---------------------------------------------------------------
+const CATEGORIES = [
+  { key: "deal", name: "配り方", color: "var(--c-deal)", symbol: "fan" },
+  { key: "action", name: "手番の行動", color: "var(--c-action)", symbol: "hand" },
+  { key: "cond", name: "出せる条件", color: "var(--c-cond)", symbol: "key" },
+  { key: "flow", name: "場の流れ", color: "var(--c-flow)", symbol: "loop" },
+  { key: "win", name: "上がり条件", color: "var(--c-win)", symbol: "flag" },
+];
+const CAT = Object.fromEntries(CATEGORIES.map((c) => [c.key, c]));
+
+const CARDS = [
+  { id: "deal_all", cat: "deal", name: "全部配る", desc: "山札を全員に配り切る" },
+  { id: "add_jokers", cat: "deal", name: "ジョーカー入り", desc: "ジョーカーを山札に入れる", param: { key: "count", label: "枚数", min: 1, max: 2, def: 1 } },
+  { id: "place_on_field", cat: "deal", name: "最初に並べる", desc: "配った後、指定の数字を場に並べる", param: { key: "rank", label: "数字", min: 1, max: 13, def: 7 } },
+  { id: "act_play", cat: "action", name: "出す", desc: "手札から場に出せる" },
+  { id: "act_pass", cat: "action", name: "パス", desc: "何もせずに手番を終えられる" },
+  { id: "act_draw_from_next", cat: "action", name: "隣から引く", desc: "次の人の手札から1枚引く" },
+  { id: "cond_stronger", cat: "cond", name: "強い札だけ", desc: "場より強い札しか出せない" },
+  { id: "cond_same_count", cat: "cond", name: "同じ枚数", desc: "同じ数字を場と同じ枚数で出す" },
+  { id: "order_daifugo", cat: "cond", name: "2が最強", desc: "3が最も弱く、2が最も強い" },
+  { id: "cond_adjacent", cat: "cond", name: "隣の数字", desc: "同じマークの隣の数字に出す" },
+  { id: "flow_clear_on_all_pass", cat: "flow", name: "パスで流す", desc: "全員パスで場を流す" },
+  { id: "flow_discard_pairs", cat: "flow", name: "ペアを捨てる", desc: "同じ数字2枚を自動で捨てる" },
+  { id: "win_empty_hand", cat: "win", name: "手札0で上がり", desc: "手札が無くなったら上がり" },
+  { id: "win_ranking", cat: "win", name: "順位を付ける", desc: "1人残るまで続けて順位を付ける" },
+  { id: "lose_on_pass_limit", cat: "win", name: "パスで負け", desc: "パスが指定回数を超えたら負け", param: { key: "limit", label: "回数", min: 1, max: 5, def: 3 } },
+  { id: "lose_holding_last", cat: "win", name: "最後は負け", desc: "最後まで残った人が負け" },
+];
+const CARD = Object.fromEntries(CARDS.map((c) => [c.id, c]));
+
+// 相性(片方にだけ書き、ルール盤が読む)
+const GOOD_WITH = {
+  cond_stronger: ["act_play", "flow_clear_on_all_pass"],
+  cond_same_count: ["act_play"],
+  order_daifugo: ["cond_stronger"],
+  cond_adjacent: ["act_play", "place_on_field"],
+  act_draw_from_next: ["flow_discard_pairs"],
+  flow_clear_on_all_pass: ["act_play"],
+  win_ranking: ["win_empty_hand"],
+  lose_on_pass_limit: ["act_pass"],
+};
+const NOT_WITH = {
+  cond_stronger: ["cond_adjacent"],
+  cond_adjacent: ["add_jokers", "cond_stronger"],
+};
+
+const PRESETS = [
+  { key: "daifugo", name: "大富豪", cards: [
+    ["deal_all"], ["add_jokers", { count: 1 }], ["act_play"], ["act_pass"], ["cond_stronger"],
+    ["cond_same_count"], ["order_daifugo"], ["flow_clear_on_all_pass"], ["win_empty_hand"], ["win_ranking"]] },
+  { key: "sevens", name: "7ならべ", cards: [
+    ["deal_all"], ["place_on_field", { rank: 7 }], ["act_play"], ["act_pass"], ["cond_adjacent"],
+    ["win_empty_hand"], ["win_ranking"], ["lose_on_pass_limit", { limit: 3 }]] },
+  { key: "oldmaid", name: "ババ抜き", cards: [
+    ["deal_all"], ["add_jokers", { count: 1 }], ["act_draw_from_next"], ["flow_discard_pairs"],
+    ["win_empty_hand"], ["lose_holding_last"]] },
+];
+
+// 分類の記号(扇・手・鍵・輪の矢印・旗)。単色の線画
+const SYMBOL_PATHS = {
+  fan: "M12 21 L4 9 M12 21 L12 5 M12 21 L20 9 M4 9 A11 11 0 0 1 20 9",
+  hand: "M7 13V6.5a1.5 1.5 0 0 1 3 0V11 M10 11V4.5a1.5 1.5 0 0 1 3 0V11 M13 11V5.5a1.5 1.5 0 0 1 3 0V12 M16 12V8.5a1.5 1.5 0 0 1 3 0V14c0 4-3 7-7 7c-3 0-5-1.5-6.5-4L3.2 12.6a1.5 1.5 0 0 1 2.6-1.5L7 13",
+  key: "M12 12a4 4 0 1 1-8 0a4 4 0 1 1 8 0 M12 12H21 M18 12v3.5 M21 12v3.5",
+  loop: "M20 12a8 8 0 1 1-2.6-5.9 M20 3.5v5h-5",
+  flag: "M5 21V3.5 M5 4h12l-3 4l3 4H5",
+};
+const SVG_NS = "http://www.w3.org/2000/svg";
+function symbolSvg(name) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS(SVG_NS, "path");
+  p.setAttribute("d", SYMBOL_PATHS[name]);
+  p.setAttribute("fill", "none");
+  p.setAttribute("stroke", "currentColor");
+  p.setAttribute("stroke-width", "2");
+  p.setAttribute("stroke-linecap", "round");
+  p.setAttribute("stroke-linejoin", "round");
+  svg.appendChild(p);
+  return svg;
+}
+function jokerHatSvg() {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS(SVG_NS, "path");
+  p.setAttribute("d", "M3 19 L6 7 L12 14 L18 7 L21 19 Z");
+  p.setAttribute("fill", "currentColor");
+  svg.appendChild(p);
+  for (const [x, y] of [[6, 6], [18, 6], [12, 13]]) {
+    const c = document.createElementNS(SVG_NS, "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y - 1.5); c.setAttribute("r", 1.8);
+    c.setAttribute("fill", "currentColor");
+    svg.appendChild(c);
+  }
+  return svg;
+}
+
+// 小さな部品づくり(文字は textContent だけで入れる)
+function el(tag, props, children) {
+  const e = document.createElement(tag);
+  if (props) {
+    for (const [k, v] of Object.entries(props)) {
+      if (v === undefined || v === null || v === false) continue;
+      if (k === "class") e.className = v;
+      else if (k === "text") e.textContent = v;
+      else if (k === "style") e.style.cssText = v;
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? "" : v);
+    }
+  }
+  for (const c of [].concat(children || [])) {
+    if (c === null || c === undefined || c === false) continue;
+    e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+// ---------------------------------------------------------------
+// ルールの形式(design/gdd/rule-format.md)
+// 読み込みは JSON.parse だけで行い、任意の処理を動かす手段は使わない
+// ---------------------------------------------------------------
+const FORMAT_VERSION = 1;
+const MAX_TEXT = 4000, MAX_CARDS = 64, MAX_ID = 40;
+const STORAGE_KEY = "rule_workshop_mock.rule";
+
+function normalizeParam(x, p) {
+  if (typeof x !== "number" || !Number.isFinite(x)) return p.def;
+  const c = Math.min(p.max, Math.max(p.min, x));
+  return Math.sign(c) * Math.round(Math.abs(c)); // 0.5 は0から遠い方へ
+}
+function isPlainObject(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+
+/** 文字列からルールを読み込む。{ok, rule:{cards, unusable}, dropped} か {ok:false, reason} */
+function parseRule(text) {
+  if (typeof text !== "string" || text.length === 0) return { ok: false, reason: "形が壊れている" };
+  if ([...text].length > MAX_TEXT) return { ok: false, reason: "長すぎる(文字列が4000文字を超えている)" };
+  let data;
+  try { data = JSON.parse(text); } catch (e) { return { ok: false, reason: "形が壊れている" }; }
+  if (!isPlainObject(data)) return { ok: false, reason: "形が違う" };
+  const v = data.format_version;
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return { ok: false, reason: "版が読めない" };
+  if (v > FORMAT_VERSION) return { ok: false, reason: "新しい版で作られたルールです" };
+  const cards = data.cards === undefined ? [] : data.cards;
+  const unusable = data.unusable_cards === undefined ? [] : data.unusable_cards;
+  if (!Array.isArray(cards) || !Array.isArray(unusable)) return { ok: false, reason: "札の一覧の形が違う" };
+  if (cards.length + unusable.length > MAX_CARDS) return { ok: false, reason: "長すぎる(札が64枚を超えている)" };
+  const all = cards.concat(unusable);
+  for (const e of all) {
+    if (isPlainObject(e) && typeof e.id === "string" && [...e.id].length > MAX_ID) {
+      return { ok: false, reason: "長すぎる(識別名が40文字を超えている)" };
+    }
+  }
+  const out = { cards: [], unusable: [] };
+  const seen = new Set();
+  let dropped = 0;
+  for (const e of all) {
+    if (!isPlainObject(e) || typeof e.id !== "string" || e.id === "") { dropped++; continue; }
+    if (seen.has(e.id)) continue; // 同じ識別名は1つ目だけを残す
+    seen.add(e.id);
+    const def = CARD[e.id];
+    if (!def) {
+      const u = { id: e.id };
+      if (e.params !== undefined) u.params = e.params;
+      out.unusable.push(u);
+      continue;
+    }
+    const c = { id: e.id };
+    if (def.param) {
+      const raw = isPlainObject(e.params) ? e.params[def.param.key] : undefined;
+      c.params = { [def.param.key]: normalizeParam(raw, def.param) };
+    }
+    out.cards.push(c);
+  }
+  return { ok: true, rule: out, dropped };
+}
+
+// 鍵を名前の順に並べ、空白なしで書く
+function stableStringify(v) {
+  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
+  if (isPlainObject(v)) {
+    return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + stableStringify(v[k])).join(",") + "}";
+  }
+  return JSON.stringify(v);
+}
+/** 決まった形で書き出す。札は識別名の順、調整値は省略しない */
+function serializeRule(rule) {
+  const cards = rule.cards.map((c) => {
+    const def = CARD[c.id];
+    const o = { id: c.id };
+    if (def.param) o.params = { [def.param.key]: c.params[def.param.key] };
+    return o;
+  }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return stableStringify({ format_version: FORMAT_VERSION, cards, unusable_cards: rule.unusable });
+}
+
+// ---------------------------------------------------------------
+// ルールの実行部分(prototypes/rule-engine/proto_engine.gd を移したもの)
+// 変更点: 同じ札は1枚目を有効にする/強さはルール札の定義の式(ジョーカー14、2が最強なら13)
+// ---------------------------------------------------------------
+const JOKER_SUIT = 4;
+const SUITS = ["♠", "♥", "♦", "♣"];
+const RANK_LABEL = ["", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
+const NO_PROGRESS_ROUNDS = 4;   // 人数×この回数、誰の札も動かなければ打ち切り
+const TURNS_PER_PLAYER = 60;    // 手数の上限 = 人数×この数(試作は300。3つのひな形の最長100手の2.4倍。待たせないよう下げた)
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const suitOf = (c) => Math.floor(c / 100);
+const rankOf = (c) => c % 100;
+const isJoker = (c) => suitOf(c) === JOKER_SUIT;
+function cardLabel(c) {
+  if (isJoker(c)) return rankOf(c) === 51 ? "ジョーカー(黒)" : "ジョーカー(赤)";
+  return SUITS[suitOf(c)] + RANK_LABEL[rankOf(c)];
+}
+// 見た目の並べ順: ♠♥♦♣、数字の順、ジョーカーは最後(黒→赤)
+function sortOrder(c) {
+  if (isJoker(c)) return rankOf(c) === 51 ? 52 : 53;
+  return suitOf(c) * 13 + (rankOf(c) - 1);
+}
+
+class Engine {
+  constructor(ruleCards, players, seed) {
+    this.rule = {};
+    for (const rc of ruleCards) {
+      if (!(rc.id in this.rule)) this.rule[rc.id] = rc.params || {}; // 1枚目を有効
+    }
+    this.rand = mulberry32(seed);
+    this.n = players;
+    this.hands = []; this.stock = []; this.discard = []; this.pile = []; this.pileOwner = -1;
+    this.layout = {}; this.layoutCount = 0; this.lastLayoutCard = -1;
+    this.passes = []; this.finished = []; this.out = []; this.consecutivePasses = 0;
+    this.forcedNext = -1; this.turn = 0; this.noProgress = 0; this.result = ""; this.loser = -1;
+    this.maxTurns = TURNS_PER_PLAYER * players;
+
+    const deck = [];
+    for (let s = 0; s < 4; s++) for (let r = 1; r <= 13; r++) deck.push(s * 100 + r);
+    if (this.has("add_jokers")) {
+      const k = Math.min(2, Math.max(1, this.param("add_jokers", "count", 1)));
+      for (let i = 1; i <= k; i++) deck.push(JOKER_SUIT * 100 + 50 + i); // 451 黒、452 赤
+    }
+    this.totalCards = deck.length;
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = this.randInt(0, i);
+      [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    for (let p = 0; p < players; p++) { this.hands.push([]); this.passes.push(0); }
+    if (this.has("deal_all")) {
+      deck.forEach((c, i) => this.hands[i % players].push(c));
+    } else {
+      // 配り方の札が無いときは各自5枚。残りは使わない
+      let k = 0;
+      for (let i = 0; i < 5; i++) for (let p = 0; p < players; p++) if (k < deck.length) this.hands[p].push(deck[k++]);
+      this.stock = deck.slice(k);
+    }
+    if (this.has("place_on_field")) {
+      const base = Math.min(13, Math.max(1, this.param("place_on_field", "rank", 7)));
+      for (let p = 0; p < players; p++) {
+        for (const c of this.hands[p].slice()) {
+          if (!isJoker(c) && rankOf(c) === base) { this.remove(this.hands[p], c); this.addToLayout(c); }
+        }
+      }
+    }
+    if (this.has("flow_discard_pairs")) for (let p = 0; p < players; p++) this.discardPairs(p);
+    this.updateFinishers();
+    this.current = this.randInt(0, players - 1);
+  }
+  randInt(a, b) { return a + Math.floor(this.rand() * (b - a + 1)); }
+  has(id) { return id in this.rule; }
+  param(id, key, d) { const v = this.rule[id] && this.rule[id][key]; return typeof v === "number" ? v : d; }
+  remove(arr, c) { const i = arr.indexOf(c); if (i >= 0) arr.splice(i, 1); }
+  strength(c) {
+    if (this.has("order_daifugo")) return isJoker(c) ? 13 : (rankOf(c) + 10) % 13;
+    return isJoker(c) ? 14 : rankOf(c);
+  }
+  layoutMode() { return this.has("cond_adjacent"); }
+  untilOne() { return this.has("win_ranking") || this.has("lose_holding_last"); }
+  isActive(p) { return !this.finished.includes(p) && !this.out.includes(p); }
+  activeCount() { let k = 0; for (let p = 0; p < this.n; p++) if (this.isActive(p)) k++; return k; }
+  nextActive(p) {
+    for (let i = 1; i <= this.n; i++) { const q = (p + i) % this.n; if (this.isActive(q)) return q; }
+    return p;
+  }
+  checkEnd() {
+    const active = this.activeCount();
+    if (active === 0) { this.result = "finished"; return true; }
+    if (active === 1 && (this.untilOne() || this.finished.length + this.out.length > 0)) {
+      for (let p = 0; p < this.n; p++) if (this.isActive(p)) this.loser = p;
+      this.result = "finished"; return true;
+    }
+    if (!this.untilOne() && this.finished.length >= 1) { this.result = "finished"; return true; }
+    return false;
+  }
+  updateFinishers() {
+    if (!this.has("win_empty_hand")) return [];
+    const done = [];
+    for (let p = 0; p < this.n; p++) {
+      if (this.isActive(p) && this.hands[p].length === 0) { this.finished.push(p); this.noProgress = 0; done.push(p); }
+    }
+    return done;
+  }
+  /** 次に手番を持つ人を返す。終わったら -1 */
+  nextTurn() {
+    for (let guard = 0; guard < this.n + 2; guard++) {
+      if (this.checkEnd()) return -1;
+      if (!this.isActive(this.current)) { this.current = this.nextActive(this.current); continue; }
+      this.turn++;
+      if (this.turn > this.maxTurns) { this.result = "draw_turn_limit"; return -1; }
+      if (this.noProgress > this.n * NO_PROGRESS_ROUNDS) { this.result = "stalemate"; return -1; }
+      return this.current;
+    }
+    this.result = "stalemate";
+    return -1;
+  }
+  legalMoves(p) {
+    const moves = [];
+    if (this.has("act_play")) moves.push(...this.playMoves(p));
+    if (this.has("act_draw_from_next")) {
+      const q = this.nextWithCards(p);
+      if (q !== -1) moves.push({ type: "draw", from: q });
+    }
+    if (this.has("act_pass")) moves.push({ type: "pass" });
+    if (moves.length === 0) moves.push({ type: "forced_pass" });
+    return moves;
+  }
+  nextWithCards(p) {
+    for (let i = 1; i < this.n; i++) {
+      const q = (p + i) % this.n;
+      if (this.isActive(q) && this.hands[q].length > 0) return q;
+    }
+    return -1;
+  }
+  playMoves(p) {
+    const moves = [];
+    const hand = this.hands[p];
+    if (this.layoutMode()) {
+      for (const c of hand) {
+        if (isJoker(c) || !this.adjacentOk(c)) continue;
+        if (this.has("cond_stronger") && this.lastLayoutCard !== -1 && this.strength(c) <= this.strength(this.lastLayoutCard)) continue;
+        moves.push({ type: "play", cards: [c] });
+      }
+      return moves;
+    }
+    const groups = new Map();
+    const jokers = [];
+    for (const c of hand) {
+      if (isJoker(c)) { jokers.push(c); continue; }
+      const r = rankOf(c);
+      if (!groups.has(r)) groups.set(r, []);
+      groups.get(r).push(c);
+    }
+    for (const g of groups.values()) {
+      const maxK = this.has("cond_same_count") ? g.length : 1;
+      for (let k = 1; k <= maxK; k++) {
+        const cards = g.slice(0, k);
+        if (this.pileOk(cards)) moves.push({ type: "play", cards });
+      }
+    }
+    for (const j of jokers) if (this.pileOk([j])) moves.push({ type: "play", cards: [j] });
+    return moves;
+  }
+  pileOk(cards) {
+    if (this.pile.length === 0) return true;
+    if (this.has("cond_same_count") && cards.length !== this.pile.length) return false;
+    if (this.has("cond_stronger") && this.strength(cards[0]) <= this.strength(this.pile[0])) return false;
+    return true;
+  }
+  adjacentOk(c) {
+    const ranks = this.layout[suitOf(c)] || [];
+    if (ranks.length === 0) return !this.has("place_on_field");
+    const r = rankOf(c);
+    return ranks.includes(r - 1) || ranks.includes(r + 1);
+  }
+  /** 簡単なコンピューター: 出せるなら一番弱い札(同じ強さなら枚数の多い組)、出せなければ引く、それも無ければパス */
+  choose(p, moves) {
+    let best = null;
+    for (const mv of moves) {
+      if (mv.type !== "play") continue;
+      if (!best) { best = mv; continue; }
+      const sn = this.strength(mv.cards[0]), sb = this.strength(best.cards[0]);
+      if (sn < sb || (sn === sb && mv.cards.length > best.cards.length)) best = mv;
+    }
+    if (best) return best;
+    for (const t of ["draw", "pass", "forced_pass"]) for (const mv of moves) if (mv.type === t) return mv;
+    return moves[0];
+  }
+  /** 手を適用し、起きたことの説明の並びを返す */
+  apply(p, mv) {
+    const ev = [];
+    switch (mv.type) {
+      case "play":
+        for (const c of mv.cards) this.remove(this.hands[p], c);
+        if (this.layoutMode()) {
+          for (const c of mv.cards) { this.addToLayout(c); this.lastLayoutCard = c; }
+        } else {
+          this.discard.push(...this.pile);
+          this.pile = mv.cards.slice();
+          this.pileOwner = p;
+        }
+        ev.push({ t: "play", p, cards: mv.cards.slice() });
+        this.consecutivePasses = 0; this.noProgress = 0;
+        break;
+      case "draw": {
+        const q = mv.from;
+        const idx = this.randInt(0, this.hands[q].length - 1);
+        const c = this.hands[q].splice(idx, 1)[0];
+        this.hands[p].push(c);
+        ev.push({ t: "draw", p, from: q, card: c });
+        if (this.has("flow_discard_pairs")) {
+          const d = this.discardPairs(p);
+          if (d.length) ev.push({ t: "pairs", p, cards: d });
+        }
+        this.noProgress = 0;
+        break;
+      }
+      case "pass":
+      case "forced_pass":
+        ev.push({ t: mv.type, p });
+        if (mv.type === "pass") {
+          this.passes[p]++;
+          if (this.has("lose_on_pass_limit") && this.passes[p] > this.param("lose_on_pass_limit", "limit", 3)) {
+            this.eliminate(p);
+            ev.push({ t: "out", p });
+          }
+        }
+        this.consecutivePasses++;
+        this.noProgress++;
+        if (this.has("flow_clear_on_all_pass") && this.pile.length > 0) {
+          const needed = this.activeCount() - (this.isActive(this.pileOwner) ? 1 : 0);
+          if (this.consecutivePasses >= needed) {
+            this.discard.push(...this.pile);
+            this.pile = [];
+            this.consecutivePasses = 0; this.noProgress = 0;
+            this.forcedNext = this.pileOwner;
+            ev.push({ t: "clear", p: this.pileOwner });
+          }
+        }
+        break;
+    }
+    if (!this.conservationOk()) { this.result = "error_conservation"; ev.push({ t: "error" }); }
+    for (const f of this.updateFinishers()) ev.push({ t: "finish", p: f, place: this.finished.indexOf(f) + 1 });
+    if (this.forcedNext !== -1) {
+      this.current = this.isActive(this.forcedNext) ? this.forcedNext : this.nextActive(this.forcedNext);
+      this.forcedNext = -1;
+    } else {
+      this.current = this.nextActive(p);
+    }
+    return ev;
+  }
+  eliminate(p) {
+    this.out.push(p);
+    for (const c of this.hands[p]) {
+      if (this.layoutMode() && !isJoker(c)) this.addToLayout(c); else this.discard.push(c);
+    }
+    this.hands[p] = [];
+    this.noProgress = 0;
+  }
+  addToLayout(c) {
+    const s = suitOf(c);
+    if (!this.layout[s]) this.layout[s] = [];
+    this.layout[s].push(rankOf(c));
+    this.layoutCount++;
+  }
+  discardPairs(p) {
+    const byRank = new Map();
+    for (const c of this.hands[p]) {
+      if (isJoker(c)) continue;
+      const r = rankOf(c);
+      if (!byRank.has(r)) byRank.set(r, []);
+      byRank.get(r).push(c);
+    }
+    const thrown = [];
+    for (const g of byRank.values()) {
+      const k = Math.floor(g.length / 2) * 2;
+      for (let i = 0; i < k; i++) { this.remove(this.hands[p], g[i]); this.discard.push(g[i]); thrown.push(g[i]); }
+    }
+    return thrown;
+  }
+  conservationOk() {
+    let k = this.stock.length + this.discard.length + this.pile.length + this.layoutCount;
+    for (const h of this.hands) k += h.length;
+    return k === this.totalCards;
+  }
+}
+
+/** 画面なしで1局を最後まで回す(確かめ用) */
+function simulate(ruleCards, seed) {
+  const e = new Engine(ruleCards, 4, seed);
+  for (;;) {
+    const p = e.nextTurn();
+    if (p === -1) break;
+    e.apply(p, e.choose(p, e.legalMoves(p)));
+    if (e.result === "error_conservation") break;
+  }
+  return { result: e.result, turns: e.turn };
+}
+
+// ---------------------------------------------------------------
+// 相性の注意
+// ---------------------------------------------------------------
+function computeWarnings(ids) {
+  const set = new Set(ids);
+  const list = [];
+  for (const id of ids) {
+    for (const g of GOOD_WITH[id] || []) {
+      if (!set.has(g)) list.push({ cards: [id], text: `「${CARD[id].name}」には「${CARD[g].name}」があるとよい` });
+    }
+  }
+  const pairDone = new Set();
+  for (const id of ids) {
+    for (const b of NOT_WITH[id] || []) {
+      const key = [id, b].sort().join("|");
+      if (set.has(b) && !pairDone.has(key)) {
+        pairDone.add(key);
+        list.push({ cards: [id, b], text: `「${CARD[id].name}」と「${CARD[b].name}」は両立しない` });
+      }
+    }
+  }
+  if (ids.length > 0 && !ids.some((id) => CARD[id].cat === "action")) list.push({ cards: [], text: "手番の行動の札が無い(誰も動けない)" });
+  if (ids.length > 0 && !ids.some((id) => CARD[id].cat === "win")) list.push({ cards: [], text: "上がり条件の札が無い(決着しない)" });
+  if (ids.length === 0) list.push({ cards: [], text: "札が1枚も置かれていない" });
+  return list;
+}
+
+// ---------------------------------------------------------------
+// 画面の状態
+// ---------------------------------------------------------------
+const state = {
+  board: [],            // [{id, params}]。盤の上は常に整った形(重複なし)
+  unusable: [],
+  basePreset: null,     // 最後に並べたひな形の名前
+  fixStartedAt: null,   // 「直す」を押した時刻
+  battleClickedAt: null,
+  speedFast: false,
+  autoMe: false,
+  seedOverride: null,
+};
+const HUMAN = 0;
+const SEAT_NAMES = ["あなた", "コンピューター1", "コンピューター2", "コンピューター3"];
+const SEAT_POS = ["", "左", "上", "右"];
+
+function boardIds() { return state.board.map((c) => c.id); }
+function findOnBoard(id) { return state.board.find((c) => c.id === id); }
+
+function presetCards(p) {
+  return p.cards.map(([id, params]) => {
+    const def = CARD[id];
+    const c = { id };
+    if (def.param) c.params = { [def.param.key]: params ? params[def.param.key] : def.param.def };
+    return c;
+  });
+}
+/** 一番近いひな形と、そこからの違いの数 */
+function nearestPreset() {
+  const mine = new Set(state.board.map((c) => c.id + ":" + JSON.stringify(c.params || {})));
+  let best = null;
+  for (const p of PRESETS) {
+    const theirs = new Set(presetCards(p).map((c) => c.id + ":" + JSON.stringify(c.params || {})));
+    let diff = 0;
+    for (const x of mine) if (!theirs.has(x)) diff++;
+    for (const x of theirs) if (!mine.has(x)) diff++;
+    if (!best || diff < best.diff) best = { p, diff };
+  }
+  return best;
+}
+function ruleTitle() {
+  if (state.board.length === 0) return "(札がありません)";
+  const n = nearestPreset();
+  if (n.diff === 0) return n.p.name;
+  if (n.diff <= 6) return `自作のルール(${n.p.name}から${n.diff}か所変更)`;
+  return "自作のルール";
+}
+
+// ---------------------------------------------------------------
+// 工房の描画
+// ---------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+
+function setMessage(text, bad) {
+  const m = $("ws-message");
+  m.textContent = text;
+  m.classList.toggle("bad", !!bad);
+}
+
+function placeCard(id) {
+  if (findOnBoard(id)) return; // 同じ札は1枚まで
+  const def = CARD[id];
+  const c = { id };
+  if (def.param) c.params = { [def.param.key]: def.param.def };
+  state.board.push(c);
+  renderWorkshop();
+}
+function removeCard(id) {
+  state.board = state.board.filter((c) => c.id !== id);
+  renderWorkshop();
+}
+function changeParam(id, delta) {
+  const c = findOnBoard(id);
+  const p = CARD[id].param;
+  const v = c.params[p.key] + delta;
+  if (v < p.min || v > p.max) return;
+  c.params[p.key] = v;
+  renderWorkshop();
+}
+
+function ruleCardEl(def, where, warned) {
+  const cat = CAT[def.cat];
+  const onBoard = where === "board";
+  const placedInBox = where === "box" && !!findOnBoard(def.id);
+  const placed = findOnBoard(def.id);
+  const kids = [
+    el("div", { class: "band", style: `background:${cat.color}` }, [symbolSvg(cat.symbol), cat.name]),
+    el("div", { class: "rname", text: def.name }),
+    el("div", { class: "rdesc", text: def.desc }),
+  ];
+  if (onBoard && def.param) {
+    const v = placed.params[def.param.key];
+    const label = def.param.key === "rank" ? RANK_LABEL[v] : String(v);
+    kids.push(el("div", { class: "rval" }, [def.param.label + " ", el("b", { text: label })]));
+    kids.push(el("div", { class: "knobs" }, [
+      el("button", { class: "knob", "aria-label": `${def.name}の${def.param.label}を減らす`, disabled: v <= def.param.min,
+        onclick: (e) => { e.stopPropagation(); changeParam(def.id, -1); } }, ["−"]),
+      el("button", { class: "knob", "aria-label": `${def.name}の${def.param.label}を増やす`, disabled: v >= def.param.max,
+        onclick: (e) => { e.stopPropagation(); changeParam(def.id, +1); } }, ["＋"]),
+    ]));
+  } else {
+    kids.push(el("div", { class: "act", text: onBoard ? "押すと外す" : placedInBox ? "盤にあります(押すと外す)" : "押すと置く" }));
+  }
+  if (warned) kids.push(el("div", { class: "badge", "aria-hidden": "true", text: "!" }));
+  const cls = ["rcard"];
+  if (def.param && onBoard) cls.push("has-param");
+  if (placedInBox) cls.push("in-box-placed");
+  if (warned) cls.push("warned");
+  // 札全体は div にし、押せる部分(札の本体)を role=button で扱う。中の「−」「＋」と入れ子にしないため
+  const card = el("div", {
+    class: cls.join(" "), role: "button", tabindex: "0", "data-id": def.id, "data-where": where,
+    "aria-label": `${def.name}: ${def.desc}${warned ? "(注意あり)" : ""}`,
+  }, kids);
+  const act = () => {
+    if (onBoard || placedInBox) removeCard(def.id); else placeCard(def.id);
+  };
+  card.addEventListener("click", act);
+  card.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); act(); } });
+  return card;
+}
+
+function renderWorkshop() {
+  const ids = boardIds();
+  const warnings = computeWarnings(ids);
+  const warnedIds = new Set(warnings.flatMap((w) => w.cards));
+
+  // 注意の一覧
+  const w = $("warnings");
+  w.replaceChildren();
+  if (warnings.length) {
+    w.appendChild(el("ul", { class: "warn-list", "aria-label": "相性の注意" }, warnings.map((x) => el("li", { text: x.text }))));
+  } else {
+    w.appendChild(el("div", { class: "warn-ok", text: "相性の注意はありません" }));
+  }
+
+  // ルール盤
+  const board = $("board");
+  board.replaceChildren();
+  for (const cat of CATEGORIES) {
+    const cards = CARDS.filter((d) => d.cat === cat.key && findOnBoard(d.id));
+    board.appendChild(el("div", { class: "board-col", "data-cat": cat.key }, [
+      el("div", { class: "col-head", style: `background:${cat.color}` }, [symbolSvg(cat.symbol), cat.name]),
+      el("div", { class: "col-cards" }, cards.length
+        ? cards.map((d) => ruleCardEl(d, "board", warnedIds.has(d.id)))
+        : [el("div", { class: "col-empty", text: "札なし" })]),
+    ]));
+  }
+  const un = $("unusable");
+  un.replaceChildren();
+  if (state.unusable.length) {
+    un.classList.remove("hidden");
+    un.appendChild(document.createTextNode("使えない札(知らない識別名。保存すると残ります): "));
+    for (const u of state.unusable) un.appendChild(el("span", { text: u.id }));
+  } else {
+    un.classList.add("hidden");
+  }
+
+  // 札箱
+  const box = $("box");
+  box.replaceChildren();
+  for (const cat of CATEGORIES) {
+    box.appendChild(el("div", { class: "box-group" }, [
+      el("div", { class: "box-group-head" }, [symbolSvg(cat.symbol), cat.name]),
+      el("div", { class: "box-cards" }, CARDS.filter((d) => d.cat === cat.key).map((d) => ruleCardEl(d, "box", false))),
+    ]));
+  }
+
+  $("ws-rule-name").textContent = "いまのルール: " + ruleTitle();
+  $("ws-summary").textContent = `盤の札 ${ids.length}枚` + (warnings.length && ids.length ? ` / 注意 ${warnings.length}件` : "");
+  $("json-view").textContent = serializeRule({ cards: state.board, unusable: state.unusable });
+}
+
+function loadPreset(p) {
+  state.board = presetCards(p);
+  state.unusable = [];
+  state.basePreset = p.name;
+  setMessage(`「${p.name}」のひな形を並べました`);
+  renderWorkshop();
+}
+
+function saveRule() {
+  const text = serializeRule({ cards: state.board, unusable: state.unusable });
+  if ([...text].length > MAX_TEXT) { setMessage("保存できません: 長すぎる", true); return; }
+  try {
+    localStorage.setItem(STORAGE_KEY, text);
+    setMessage(`保存しました(${text.length}文字)`);
+  } catch (e) {
+    setMessage("保存できません: ブラウザの保存機能が使えない", true);
+  }
+}
+function loadRule() {
+  let text = null;
+  try { text = localStorage.getItem(STORAGE_KEY); } catch (e) { text = null; }
+  if (text === null) { setMessage("保存したルールがありません", true); return; }
+  const r = parseRule(text);
+  if (!r.ok) { setMessage("読み込めません: " + r.reason, true); return; }
+  state.board = r.rule.cards;
+  state.unusable = r.rule.unusable;
+  state.basePreset = null;
+  setMessage("読み込みました" + (r.dropped ? `(壊れた札を${r.dropped}枚外しました)` : ""));
+  renderWorkshop();
+}
+
+// ---------------------------------------------------------------
+// 対戦
+// ---------------------------------------------------------------
+let battle = null; // { engine, current, waitingHuman, moves, selected, logs, firstTurnMeasured, timer, ended }
+
+function cpuDelay() { return state.speedFast ? 60 : 380; }
+
+function newSeed() {
+  if (state.seedOverride !== null) return state.seedOverride;
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return a[0];
+}
+
+function startBattle() {
+  state.battleClickedAt = performance.now();
+  if (battle && battle.timer) clearTimeout(battle.timer);
+  const ruleCards = state.board.map((c) => ({ id: c.id, params: c.params ? { ...c.params } : {} })); // 写しを渡して固定
+  const engine = new Engine(ruleCards, 4, newSeed());
+  battle = {
+    engine, ruleIds: ruleCards.map((c) => c.id), title: ruleTitle(),
+    current: -1, moves: [], selected: null, logs: [], firstTurnMeasured: false, timer: null, ended: false,
+  };
+  $("screen-workshop").classList.add("hidden");
+  $("screen-battle").classList.remove("hidden");
+  $("overlay").classList.add("hidden");
+  window.scrollTo(0, 0);
+  renderChips();
+  advance();
+}
+
+function renderChips() {
+  const chips = $("bt-chips");
+  chips.replaceChildren(el("span", { class: "note", style: "margin-right:4px", text: battle.title + ":" }));
+  for (const cat of CATEGORIES) {
+    for (const c of state.board) {
+      const def = CARD[c.id];
+      if (def.cat !== cat.key) continue;
+      let t = def.name;
+      if (def.param) t += `[${def.param.key === "rank" ? RANK_LABEL[c.params[def.param.key]] : c.params[def.param.key]}]`;
+      chips.appendChild(el("span", { class: "chip", style: `background:${cat.color}`, text: t }));
+    }
+  }
+}
+
+function measureFirstTurn() {
+  if (battle.firstTurnMeasured) return;
+  battle.firstTurnMeasured = true;
+  requestAnimationFrame(() => {
+    const now = performance.now();
+    const prep = Math.round(now - state.battleClickedAt);
+    let text = `対戦ボタンから最初の手番まで: ${prep}ミリ秒`;
+    if (state.fixStartedAt !== null) {
+      const total = Math.round(now - state.fixStartedAt);
+      text = `直してから最初の手番まで: ${total}ミリ秒 / ` + text;
+    }
+    $("timing").textContent = text;
+    window.__lastTiming = { prepMs: prep, totalMs: state.fixStartedAt !== null ? Math.round(now - state.fixStartedAt) : null };
+    state.fixStartedAt = null;
+  });
+}
+
+function advance() {
+  const e = battle.engine;
+  if (e.result === "error_conservation") { endBattle(); return; }
+  const p = e.nextTurn();
+  if (p === -1) { endBattle(); return; }
+  battle.current = p;
+  battle.selected = null;
+  battle.moves = e.legalMoves(p);
+  const humanTurn = p === HUMAN && !state.autoMe;
+  renderBattle();
+  measureFirstTurn();
+  if (humanTurn) {
+    if (battle.moves.length === 1 && battle.moves[0].type === "forced_pass") {
+      battle.timer = setTimeout(() => doMove(HUMAN, battle.moves[0]), 700);
+    }
+    return;
+  }
+  const delay = p === HUMAN ? Math.max(cpuDelay(), 200) : cpuDelay();
+  battle.timer = setTimeout(() => doMove(p, e.choose(p, battle.moves)), delay);
+}
+
+function doMove(p, mv) {
+  if (!battle || battle.ended || battle.current !== p) return;
+  battle.timer = null;
+  const ev = battle.engine.apply(p, mv);
+  for (const x of ev) {
+    const t = describe(x);
+    if (t) battle.logs.push(t);
+  }
+  if (battle.logs.length > 30) battle.logs = battle.logs.slice(-30);
+  battle.current = -1;
+  advance();
+}
+
+function describe(x) {
+  const who = SEAT_NAMES[x.p];
+  const ga = x.p === HUMAN ? "あなたが" : who + "が";
+  switch (x.t) {
+    case "play": return `${ga}${x.cards.map(cardLabel).join("・")}を出した`;
+    case "draw": return x.p === HUMAN ? `あなたが${SEAT_NAMES[x.from]}から${cardLabel(x.card)}を引いた` : `${ga}${x.from === HUMAN ? "あなた" : SEAT_NAMES[x.from]}から1枚引いた`;
+    case "pairs": return `${ga}ペアを${x.cards.length / 2}組捨てた`;
+    case "pass": return `${ga}パスした`;
+    case "forced_pass": return `${ga}出せる手が無く、自動でパス`;
+    case "out": return `${ga}パスの回数を超えて負け`;
+    case "clear": return "全員パスで場が流れた";
+    case "finish": return `${ga}上がった(${x.place}位)`;
+    case "error": return "札の総数が合わない(進行の誤り)";
+  }
+  return "";
+}
+
+function playingCardEl(c, opts) {
+  const o = opts || {};
+  const red = isJoker(c) ? rankOf(c) === 52 : suitOf(c) === 1 || suitOf(c) === 2;
+  const cls = ["pcard", red ? "r" : "k"];
+  if (o.can) cls.push("can");
+  if (o.sel) cls.push("sel");
+  if (o.dim) cls.push("dim");
+  let kids;
+  if (isJoker(c)) {
+    kids = [el("span", { class: "mid" }, [jokerHatSvg()]), el("span", { class: "jk", text: "ジョーカー" })];
+  } else {
+    const ix = () => el("span", { class: "ix" }, [RANK_LABEL[rankOf(c)], el("small", { text: SUITS[suitOf(c)] })]);
+    const ix2 = ix(); ix2.classList.add("ix2");
+    kids = [ix(), el("span", { class: "mid", text: SUITS[suitOf(c)] }), ix2];
+  }
+  const tag = o.onclick ? "button" : "div";
+  const props = { class: cls.join(" "), "aria-label": cardLabel(c) + (o.can ? "(出せる)" : ""), "data-card": String(c) };
+  if (o.onclick) props.onclick = o.onclick;
+  if (o.onclick && !o.can) props["aria-disabled"] = "true";
+  return el(tag, props, kids);
+}
+
+function seatStatus(e, p) {
+  const f = e.finished.indexOf(p);
+  if (f >= 0) return `${f + 1}位で上がり`;
+  if (e.out.includes(p)) return "負け(パスの回数)";
+  if (e.has("lose_on_pass_limit")) return `パス ${e.passes[p]}/${e.param("lose_on_pass_limit", "limit", 3)}回`;
+  return "";
+}
+
+function renderBattle() {
+  const e = battle.engine;
+  for (let p = 1; p <= 3; p++) {
+    const s = $("seat-" + p);
+    const cnt = e.hands[p].length;
+    s.className = `seat seat-${SEAT_POS[p] === "左" ? "left" : SEAT_POS[p] === "上" ? "top" : "right"}` +
+      (battle.current === p ? " turn" : "") + (!e.isActive(p) ? " gone" : "");
+    const backs = el("div", { class: "backs", "aria-hidden": "true" });
+    for (let i = 0; i < Math.min(cnt, 8); i++) backs.appendChild(el("i"));
+    s.replaceChildren(
+      el("div", { class: "pos", text: SEAT_POS[p] + "の席" }),
+      el("div", { class: "who", text: SEAT_NAMES[p] }),
+      backs,
+      el("div", { class: "cnt", text: `手札 ${cnt}枚` }),
+      el("div", { class: "st", text: battle.current === p ? "考え中…" : seatStatus(e, p) }),
+    );
+  }
+
+  // 場
+  const field = $("field");
+  field.replaceChildren();
+  if (e.layoutMode()) {
+    const grid = el("div", { class: "layout", "aria-label": "並べた札" });
+    for (let s = 0; s < 4; s++) {
+      const row = el("div", { class: "lrow" }, [el("span", { class: "lsuit", style: `color:${s === 1 || s === 2 ? "#F3B0B4" : "var(--paper)"}`, text: SUITS[s] })]);
+      const ranks = e.layout[s] || [];
+      for (let r = 1; r <= 13; r++) {
+        const on = ranks.includes(r);
+        row.appendChild(el("span", { class: "lcell" + (on ? " on " + (s === 1 || s === 2 ? "r" : "k") : ""), text: on ? RANK_LABEL[r] : "" }));
+      }
+      grid.appendChild(row);
+    }
+    field.appendChild(el("div", { class: "field-label", text: "場(同じマークの隣の数字に出せます)" }));
+    field.appendChild(grid);
+  } else if (e.has("act_play")) {
+    const pile = el("div", { class: "pile" }, e.pile.map((c) => playingCardEl(c)));
+    field.appendChild(el("div", { class: "field-label", text: e.pile.length ? `場: ${e.pileOwner === HUMAN ? "あなた" : SEAT_NAMES[e.pileOwner]}が出した札` : "場は空(どの札でも出せます)" }));
+    field.appendChild(pile);
+  } else {
+    field.appendChild(el("div", { class: "field-label", text: e.has("act_draw_from_next") ? "隣の人から1枚引いて、ペアを捨てていきます" : "場に出す札はありません" }));
+  }
+  field.appendChild(el("div", { class: "field-sub", text: `捨て札 ${e.discard.length}枚 / 手数 ${e.turn}(上限 ${e.maxTurns})` }));
+
+  // 出来事
+  const log = $("log");
+  const last = battle.logs.slice(-2);
+  log.replaceChildren(
+    el("span", { class: "old", text: last.length > 1 ? last[0] : "" }),
+    el("span", { text: last.length ? last[last.length - 1] : "対戦開始" }),
+  );
+
+  // 自分
+  const myTurn = battle.current === HUMAN && !state.autoMe;
+  const head = $("me-head");
+  head.replaceChildren(...[
+    el("span", { text: `あなたの手札 ${e.hands[HUMAN].length}枚` }),
+    seatStatus(e, HUMAN) ? el("span", { text: seatStatus(e, HUMAN) }) : null,
+    battle.current === HUMAN ? el("span", { class: "myturn", text: state.autoMe ? "あなたの番(おまかせ中)" : "あなたの番" }) : null,
+  ].filter(Boolean));
+
+  const playMoves = myTurn ? battle.moves.filter((m) => m.type === "play") : [];
+  const playable = new Set();
+  for (const m of playMoves) {
+    if (isJoker(m.cards[0])) playable.add(m.cards[0]);
+    else for (const c of e.hands[HUMAN]) if (rankOf(c) === rankOf(m.cards[0]) && !isJoker(c)) playable.add(c);
+  }
+  const hand = e.hands[HUMAN].slice().sort((a, b) => {
+    if (e.layoutMode()) return sortOrder(a) - sortOrder(b);
+    return e.strength(a) - e.strength(b) || sortOrder(a) - sortOrder(b);
+  });
+  const sel = battle.selected;
+  $("hand").replaceChildren(...hand.map((c) => playingCardEl(c, {
+    can: playable.has(c),
+    sel: sel && sel.cards.includes(c),
+    dim: myTurn && !playable.has(c),
+    onclick: () => onHandTap(c),
+  })));
+
+  // 手の行動のボタン
+  const actions = $("actions");
+  actions.replaceChildren();
+  if (myTurn) {
+    if (sel) {
+      for (const k of sel.counts) {
+        actions.appendChild(el("button", { class: "tag play", onclick: () => playSelected(k) }, [`${k}枚で出す`]));
+      }
+      actions.appendChild(el("button", { class: "tag", onclick: () => { battle.selected = null; renderBattle(); } }, ["やめる"]));
+    }
+    const draw = battle.moves.find((m) => m.type === "draw");
+    if (draw) actions.appendChild(el("button", { class: "tag", onclick: () => doMove(HUMAN, draw) }, [`${SEAT_NAMES[draw.from]}から引く`]));
+    const pass = battle.moves.find((m) => m.type === "pass");
+    if (pass) actions.appendChild(el("button", { class: "tag", onclick: () => doMove(HUMAN, pass) }, ["パス"]));
+    if (battle.moves.length === 1 && battle.moves[0].type === "forced_pass") {
+      actions.appendChild(el("span", { class: "note", text: "出せる手が無いので自動でパスします" }));
+    } else if (playMoves.length) {
+      actions.appendChild(el("span", { class: "note", text: "金の縁の札を押すと出せます" }));
+    }
+  }
+}
+
+function onHandTap(c) {
+  if (!battle || battle.current !== HUMAN || state.autoMe) return;
+  const e = battle.engine;
+  const plays = battle.moves.filter((m) => m.type === "play" &&
+    (isJoker(c) ? m.cards[0] === c : !isJoker(m.cards[0]) && rankOf(m.cards[0]) === rankOf(c)));
+  if (plays.length === 0) return;
+  if (plays.length === 1) {
+    const k = plays[0].cards.length;
+    doMove(HUMAN, { type: "play", cards: sameRankCards(e, c, k) });
+    return;
+  }
+  // 同じ数字を何枚で出すかを選ぶ
+  if (battle.selected && battle.selected.rank === rankOf(c)) { battle.selected = null; renderBattle(); return; }
+  const counts = plays.map((m) => m.cards.length).sort((a, b) => a - b);
+  battle.selected = { rank: rankOf(c), base: c, counts, cards: sameRankCards(e, c, counts[counts.length - 1]) };
+  renderBattle();
+}
+function sameRankCards(e, c, k) {
+  if (isJoker(c)) return [c];
+  const others = e.hands[HUMAN].filter((x) => x !== c && !isJoker(x) && rankOf(x) === rankOf(c));
+  return [c].concat(others).slice(0, k);
+}
+function playSelected(k) {
+  const s = battle.selected;
+  doMove(HUMAN, { type: "play", cards: sameRankCards(battle.engine, s.base, k) });
+}
+
+// ---------------------------------------------------------------
+// 結果
+// ---------------------------------------------------------------
+function diagnose(e, ids, result) {
+  const has = (id) => ids.includes(id);
+  const tips = [];
+  if (result === "stalemate") {
+    if (!ids.some((id) => CARD[id].cat === "action")) tips.push("手番の行動の札(出す・パス・隣から引く)がありません。");
+    if (has("cond_adjacent") && !has("place_on_field")) tips.push("「隣の数字」には始まりの札が要ります。「最初に並べる」を置きましょう。");
+    if (has("cond_adjacent") && has("add_jokers")) tips.push("「隣の数字」ではジョーカーを出せず、手札に残ります。");
+    if (has("cond_stronger") && !has("flow_clear_on_all_pass")) tips.push("「強い札だけ」で場が詰まりました。「パスで流す」を置くと場が流れます。");
+    if (has("act_draw_from_next") && !has("flow_discard_pairs")) tips.push("引くだけで手札が減りません。「ペアを捨てる」を置きましょう。");
+    if (!tips.length) tips.push("誰も札を動かせない手番が続きました。出せる条件をゆるめるか、場を動かす札を足しましょう。");
+  } else if (result === "draw_turn_limit") {
+    if (!has("win_empty_hand") && !has("lose_on_pass_limit")) tips.push("上がり条件の札が無いので決着しません。「手札0で上がり」を置きましょう。");
+    if (has("act_draw_from_next") && !has("flow_discard_pairs")) tips.push("引くだけで手札が減りません。「ペアを捨てる」を置きましょう。");
+    if (!has("deal_all")) tips.push("「全部配る」が無いので、手札は5枚ずつで残りの札は使われません。");
+    if (!tips.length) tips.push(`手数の上限(${e.maxTurns}手)に届きました。手札が減る速さを見直しましょう。`);
+  } else {
+    if (ids.length <= 3) tips.push("札が少ないルールです。1枚ずつ足して変化を見てみましょう。");
+    tips.push("どこか1枚を入れ替えて、もう一度試してみましょう。");
+  }
+  // 盤の注意も添える(重複は省く)
+  for (const w of computeWarnings(ids)) if (!tips.includes(w.text)) tips.push("盤の注意: " + w.text);
+  return tips;
+}
+
+function endBattle() {
+  const e = battle.engine;
+  battle.ended = true;
+  battle.current = -1;
+  renderBattle();
+  const r = e.result;
+  const box = $("result");
+  const kind = r === "finished" ? ["決着", "k-finished"] : r === "draw_turn_limit" ? ["長すぎて引き分け", "k-draw"]
+    : r === "stalemate" ? ["誰も動けず打ち切り", "k-stalemate"] : ["進行の誤り", "k-stalemate"];
+  const kids = [el("span", { class: "kind " + kind[1], "data-result": r, text: kind[0] })];
+  if (r === "finished") {
+    const humanPlace = e.finished.indexOf(HUMAN);
+    const title = humanPlace === 0 ? "あなたの勝ち" : e.loser === HUMAN || e.out.includes(HUMAN) ? "あなたの負け" :
+      humanPlace > 0 ? `あなたは${humanPlace + 1}位` : "決着しました";
+    kids.push(el("h2", { id: "result-title", text: title }));
+    const rows = [];
+    e.finished.forEach((p, i) => rows.push([p, `${i + 1}位 上がり`]));
+    for (let p = 0; p < 4; p++) {
+      if (e.finished.includes(p) || e.out.includes(p)) continue;
+      if (p === e.loser) rows.push([p, e.has("lose_holding_last") ? "負け(最後まで残った)" : "最下位"]);
+      else rows.push([p, "—(途中で決着)"]);
+    }
+    e.out.forEach((p) => rows.push([p, "負け(パスの回数)"]));
+    kids.push(el("ol", { style: "list-style:none;padding-left:0" }, rows.map(([p, t]) =>
+      el("li", { class: p === HUMAN ? "me-row" : "", text: `${SEAT_NAMES[p]}: ${t}` }))));
+  } else if (r === "draw_turn_limit") {
+    kids.push(el("h2", { id: "result-title", text: "長すぎて引き分け" }));
+    kids.push(el("p", { text: `手数の上限(${e.maxTurns}手)まで続いても決着しませんでした。` }));
+  } else if (r === "stalemate") {
+    kids.push(el("h2", { id: "result-title", text: "誰も動けず打ち切り" }));
+    kids.push(el("p", { text: "誰の札も動かない手番が続いたので、対戦を打ち切りました。" }));
+  } else {
+    kids.push(el("h2", { id: "result-title", text: "進行の誤り" }));
+    kids.push(el("p", { text: "札の総数が合わなくなりました。模型の不具合です。" }));
+  }
+  kids.push(el("p", { class: "note", style: "color:var(--black)", text: `手数 ${e.turn} / ルール: ${battle.title}` }));
+  kids.push(el("div", { class: "hint" }, [
+    el("h3", { text: "直すヒント" }),
+    el("ul", { style: "margin:0;padding-left:1.2em" }, diagnose(e, battle.ruleIds, r).map((t) => el("li", { text: t }))),
+  ]));
+  kids.push(el("div", { class: "btns" }, [
+    el("button", { class: "tag fix", id: "btn-result-fix", onclick: goFix }, ["直す(工房へ)"]),
+    el("button", { class: "tag play", id: "btn-again", onclick: startBattle }, ["同じルールでもう一度"]),
+  ]));
+  box.replaceChildren(...kids);
+  $("overlay").classList.remove("hidden");
+  $("btn-result-fix").focus();
+}
+
+function goFix() {
+  state.fixStartedAt = performance.now();
+  if (battle && battle.timer) clearTimeout(battle.timer);
+  if (battle) battle.ended = true;
+  $("overlay").classList.add("hidden");
+  $("screen-battle").classList.add("hidden");
+  $("screen-workshop").classList.remove("hidden");
+  setMessage("札を入れ替えて、もう一度「対戦」を押しましょう");
+  renderWorkshop();
+}
+
+// ---------------------------------------------------------------
+// 起動
+// ---------------------------------------------------------------
+function init() {
+  const presets = $("presets");
+  for (const p of PRESETS) {
+    presets.appendChild(el("button", { class: "tag", "data-preset": p.key, onclick: () => loadPreset(p) }, [p.name]));
+  }
+  $("btn-save").addEventListener("click", saveRule);
+  $("btn-load").addEventListener("click", loadRule);
+  $("btn-clear").addEventListener("click", () => { state.board = []; state.unusable = []; setMessage("全部外しました"); renderWorkshop(); });
+  $("btn-battle").addEventListener("click", startBattle);
+  $("btn-fix").addEventListener("click", goFix);
+  $("btn-speed").addEventListener("click", () => {
+    state.speedFast = !state.speedFast;
+    $("btn-speed").textContent = "速さ: " + (state.speedFast ? "速い" : "ふつう");
+    $("btn-speed").classList.toggle("on", state.speedFast);
+  });
+  $("btn-auto").addEventListener("click", () => {
+    state.autoMe = !state.autoMe;
+    $("btn-auto").textContent = "自分もおまかせ: " + (state.autoMe ? "入" : "切");
+    $("btn-auto").classList.toggle("on", state.autoMe);
+    if (battle && !battle.ended && battle.current === HUMAN) {
+      if (battle.timer) clearTimeout(battle.timer);
+      const p = HUMAN;
+      battle.selected = null;
+      renderBattle();
+      if (state.autoMe) battle.timer = setTimeout(() => doMove(p, battle.engine.choose(p, battle.moves)), 200);
+      else if (battle.moves.length === 1 && battle.moves[0].type === "forced_pass") battle.timer = setTimeout(() => doMove(HUMAN, battle.moves[0]), 700);
+    }
+  });
+  loadPreset(PRESETS[0]);
+  setMessage("ひな形を選ぶか、札箱から札を置いて「対戦」を押しましょう");
+}
+
+// 自動の確かめ用の入口(画面の操作には使わない)
+window.__mock = {
+  setSeed: (s) => { state.seedOverride = s; },
+  simulate: (presetKey, seeds) => {
+    const p = PRESETS.find((x) => x.key === presetKey);
+    const cards = presetCards(p);
+    const out = { finished: 0, draw_turn_limit: 0, stalemate: 0, error_conservation: 0, maxTurns: 0, sumTurns: 0 };
+    for (let s = 1; s <= seeds; s++) {
+      const r = simulate(cards, s);
+      out[r.result]++;
+      out.maxTurns = Math.max(out.maxTurns, r.turns);
+      out.sumTurns += r.turns;
+    }
+    return out;
+  },
+  parseRule, serializeRule,
+  currentRuleText: () => serializeRule({ cards: state.board, unusable: state.unusable }),
+  battleResult: () => (battle && battle.ended ? battle.engine.result : null),
+};
+
+init();
+</script>
+</body>
+</html>

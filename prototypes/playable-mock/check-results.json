@@ -1,0 +1,167 @@
+[
+  {
+    "name": "大富豪: おまかせで3局とも決着する",
+    "ok": true,
+    "detail": "finished,finished,finished"
+  },
+  {
+    "name": "7ならべ: おまかせで3局とも決着する",
+    "ok": true,
+    "detail": "finished,finished,finished"
+  },
+  {
+    "name": "ババ抜き: おまかせで3局とも決着する",
+    "ok": true,
+    "detail": "finished,finished,finished"
+  },
+  {
+    "name": "ひな形の対戦で画面の誤りが出ない",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "大富豪: 自分の札を押して対戦が最後まで進む",
+    "ok": true,
+    "detail": "結果 finished、押した回数 18"
+  },
+  {
+    "name": "大富豪: 画面の誤りが出ない",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "7ならべ: 自分の札を押して対戦が最後まで進む",
+    "ok": true,
+    "detail": "結果 finished、押した回数 15"
+  },
+  {
+    "name": "7ならべ: 画面の誤りが出ない",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "ババ抜き: 自分の札を押して対戦が最後まで進む",
+    "ok": true,
+    "detail": "結果 finished、押した回数 12"
+  },
+  {
+    "name": "ババ抜き: 画面の誤りが出ない",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "ひな形の7ならべには注意が無い",
+    "ok": true,
+    "detail": "注意 0件"
+  },
+  {
+    "name": "「隣の数字」と「ジョーカー入り」で両立しない注意が出る",
+    "ok": true,
+    "detail": "「隣の数字」と「ジョーカー入り」は両立しない"
+  },
+  {
+    "name": "注意があっても札は盤に置かれる",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "注意の札に「!」の印が付く",
+    "ok": true,
+    "detail": "add_jokers,cond_adjacent"
+  },
+  {
+    "name": "「強い札だけ」に「パスで流す」が無い注意が出る",
+    "ok": true,
+    "detail": "3件"
+  },
+  {
+    "name": "保存した文字列が決まった形と一致する",
+    "ok": true,
+    "detail": "{\"cards\":[{\"id\":\"act_play\"},{\"id\":\"add_jokers\",\"params\":{\"count\":2}},{\"id\":\"cond_same_count\"},{\"id\":\"cond_stronger\"},{\"id\":\"deal_all\"},{\"id\":\"flow_clear_on_all_pass\"},{\"id\":\"lose_on_pass_limit\",\"params\":{\"limit\":2}},{\"id\":\"order_daifugo\"},{\"id\":\"win_empty_hand\"},{\"id\":\"win_ranking\"}],\"format_version\":1,\"unusable_cards\":[]}"
+  },
+  {
+    "name": "別のルールに変えた後、読み込むと同じルールに戻る",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "ページを開き直しても読み込める",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "同じ札が2枚なら1枚目を有効にする",
+    "ok": true,
+    "detail": "[{\"id\":\"add_jokers\",\"params\":{\"count\":2}}]"
+  },
+  {
+    "name": "調整値を整える(既定値・四捨五入・範囲内に丸める・不要な値を捨てる)",
+    "ok": true,
+    "detail": "[{\"id\":\"add_jokers\",\"params\":{\"count\":1}},{\"id\":\"place_on_field\",\"params\":{\"rank\":8}},{\"id\":\"lose_on_pass_limit\",\"params\":{\"limit\":5}},{\"id\":\"act_pass\"}]"
+  },
+  {
+    "name": "知らない札は使えない札へ移す",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "壊れた文字列は理由を返して読み込まない",
+    "ok": true,
+    "detail": "形が壊れている / 形が違う / 新しい版で作られたルールです / 長すぎる(文字列が4000文字を超えている)"
+  },
+  {
+    "name": "文字列の \"2\" は数として使わず既定値にする",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "書き出しは識別名の順で調整値を省略しない",
+    "ok": true,
+    "detail": "{\"cards\":[{\"id\":\"act_pass\"},{\"id\":\"add_jokers\",\"params\":{\"count\":1}},{\"id\":\"deal_all\"}],\"format_version\":1,\"unusable_cards\":[]}"
+  },
+  {
+    "name": "手番の行動が無いと「誰も動けず打ち切り」になる",
+    "ok": true,
+    "detail": "stalemate"
+  },
+  {
+    "name": "結果に「直す」ボタンがある",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "手札が減らないルールは「長すぎて引き分け」になる",
+    "ok": true,
+    "detail": "draw_turn_limit"
+  },
+  {
+    "name": "「直す」から最初の手番までの時間を表示する",
+    "ok": true,
+    "detail": "{\"prepMs\":12,\"totalMs\":227}"
+  },
+  {
+    "name": "対戦ボタンから最初の手番まで100ミリ秒以内(柱2の3秒に十分な余裕)",
+    "ok": true,
+    "detail": "12ミリ秒"
+  },
+  {
+    "name": "工房: スマートフォンの幅で横にはみ出さない",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "工房: 押せる部分はすべて44ピクセル以上",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "対戦: スマートフォンの幅で横にはみ出さない",
+    "ok": true,
+    "detail": ""
+  },
+  {
+    "name": "対戦: 手札の札の見えている幅は44ピクセル以上",
+    "ok": true,
+    "detail": "0枚が狭い"
+  }
+]
