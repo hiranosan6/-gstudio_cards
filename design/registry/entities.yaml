@@ -63,21 +63,25 @@ entities:
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
+      - design/gdd/rule-format.md
       - design/gdd/rule-card-definition.md
     attributes:
       kind: rule_card
       category: 配り方
       display_name: ジョーカー入り
+      param_name: count
     added: 2026-11-23
   - name: place_on_field
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
+      - design/gdd/rule-format.md
       - design/gdd/rule-card-definition.md
     attributes:
       kind: rule_card
       category: 配り方
       display_name: 最初に並べる
+      param_name: rank
     added: 2026-11-23
   - name: act_play
     status: active
@@ -193,11 +197,13 @@ entities:
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
+      - design/gdd/rule-format.md
       - design/gdd/rule-card-definition.md
     attributes:
       kind: rule_card
       category: 上がり条件
       display_name: パスで負け
+      param_name: limit
     added: 2026-11-23
   - name: lose_holding_last
     status: active
@@ -328,6 +334,39 @@ formulas:
 # Required fields: name, status, source, referenced_by, value, unit, added
 
 constants:
+  - name: rule_format_version
+    status: active
+    source: design/gdd/rule-format.md
+    referenced_by:
+      - design/gdd/rule-format.md
+    value: 1
+    note: "raise only when the format shape changes"
+    added: 2026-11-23
+  - name: rule_text_max_chars
+    status: active
+    source: design/gdd/rule-format.md
+    referenced_by:
+      - design/gdd/rule-format.md
+    value: 4000
+    range: "2000-8000"
+    added: 2026-11-23
+  - name: rule_max_cards
+    status: active
+    source: design/gdd/rule-format.md
+    referenced_by:
+      - design/gdd/rule-format.md
+    value: 64
+    range: "32-128"
+    note: "cards + unusable_cards"
+    added: 2026-11-23
+  - name: rule_card_id_max_chars
+    status: active
+    source: design/gdd/rule-format.md
+    referenced_by:
+      - design/gdd/rule-format.md
+    value: 40
+    range: "32-64"
+    added: 2026-11-23
   - name: deck_size_base
     status: active
     source: design/gdd/playing-card-definition.md
