@@ -132,32 +132,79 @@ async function noHorizontalScroll(page) {
     await ctx.close();
   }
 
-  // 5. 読み込みの整え(design/gdd/rule-format.md の例)
+  // 5. 読み込みの整えと書き出し(design/gdd/rule-format.md 2026-11-24 修正版)
   {
     const { ctx, page } = await openPage(browser);
     const r = await page.evaluate(() => {
-      const P = window.__mock.parseRule, S = window.__mock.serializeRule;
-      const dup = P('{"format_version":1,"cards":[{"id":"add_jokers","params":{"count":2}},{"id":"add_jokers","params":{"count":1}}]}');
-      const norm = P('{"format_version":1,"cards":[{"id":"add_jokers"},{"id":"place_on_field","params":{"rank":7.6}},{"id":"lose_on_pass_limit","params":{"limit":9}},{"id":"act_pass","params":{"count":3}}]}');
-      const unk = P('{"format_version":1,"cards":[{"id":"foo_bar","params":{"x":1}}]}');
+      const P = window.__mock.parseRule, S = window.__mock.serializeRule, SR = window.__mock.serializeRuleWithReport;
+      const deep = (n) => '{"format_version":1,"x":' + "[".repeat(n - 1) + "]".repeat(n - 1) + "}";
+      const dup = P('{"format_version":1,"cards":[{"id":"add_jokers","params":{"count":"x"}},{"id":"add_jokers","params":{"count":2}}]}');
+      const norm = P('{"format_version":1,"cards":[{"id":"add_jokers"},{"id":"place_on_field","params":{"rank":7.6}},{"id":"lose_on_pass_limit","params":{"limit":9}},{"id":"act_pass","params":{"count":3}},{"id":"add_jokers"},5]}');
+      const unk = P('{"format_version":1,"cards":[{"id":"foo_bar","params":{"x":1},"memo":"残す"}],"unusable_cards":[{"id":"deal_all"}]}');
       const order = S(P('{"format_version":1,"cards":[{"id":"deal_all"},{"id":"act_pass"},{"id":"add_jokers"}]}').rule);
+      const nums = SR({ cards: [], unusable: [
+        { id: "z_num", v: [0.1, 1e300, 2.5e20, -0, 3, Infinity] },
+        { id: "a_str", s: 'あ"\\/\u0001', b: { y: 1, a: 2, "あ": 3, "B": 4 } },
+      ] });
+      const roundTrip = (() => { const t = S(unk.rule); return S(P(t).rule) === t; })();
       return {
-        dup: dup.rule.cards, norm: norm.rule.cards, unk: unk.rule,
-        broken: P('{"format_version":1,"cards":[').reason, arr: P("[]").reason,
-        newer: P('{"format_version":2}').reason, long: P("x".repeat(4001)).reason,
+        dup: dup.rule.cards, dupReport: dup.report.map((x) => x.kind + ":" + (x.why || x.how || "")),
+        norm: norm.rule.cards, normReport: norm.report.map((x) => x.kind),
+        unk: unk.rule, unkReport: unk.report.map((x) => x.kind),
+        reasons: {
+          broken: P('{"format_version":1,"cards":[').reason, empty: P("").reason, arr: P("[]").reason,
+          newer: P('{"format_version":2}').reason, huge: P('{"format_version":1e300}').reason,
+          half: P('{"format_version":1.5}').reason, zero: P('{"format_version":0}').reason,
+          long: P("x".repeat(4001)).reason, depth17: P(deep(17)).reason, cardsObj: P('{"format_version":1,"cards":{}}').reason,
+          many: P('{"format_version":1,"cards":[' + Array(65).fill('{"id":"x"}').join(",") + "]}").reason,
+          idLong: P('{"format_version":1,"cards":[{"id":"' + "a".repeat(41) + '"}]}').reason,
+          // 長すぎる文字列と壊れた形が両方あるときは、手順の早い「文字数」を返す
+          priority: P("{" + "x".repeat(4001)).reason,
+        },
+        ok16: P(deep(16)).ok, ok40: P('{"format_version":1,"cards":[{"id":"' + "a".repeat(40) + '"}]}').ok,
+        bom: P("﻿" + '{"format_version":1}').ok, v10: P('{"format_version":1.0}').ok,
         str: P('{"format_version":1,"cards":[{"id":"add_jokers","params":{"count":"2"}}]}').rule.cards[0].params.count,
-        order,
+        inf: P('{"format_version":1,"cards":[{"id":"add_jokers","params":{"count":1e400}}]}').rule.cards[0].params.count,
+        order, nums: nums.text, numsReport: nums.report.map((x) => x.kind), roundTrip,
       };
     });
-    check("同じ札が2枚なら1枚目を有効にする", r.dup.length === 1 && r.dup[0].params.count === 2, JSON.stringify(r.dup));
+    check("同じ札が2枚なら1枚目を有効にし、1枚目の壊れた値は既定値に整える", r.dup.length === 1 && r.dup[0].params.count === 1 && r.dupReport.includes("要素を捨てた:重複"), JSON.stringify(r.dup) + " " + r.dupReport.join(","));
     check("調整値を整える(既定値・四捨五入・範囲内に丸める・不要な値を捨てる)",
       JSON.stringify(r.norm) === JSON.stringify([{ id: "add_jokers", params: { count: 1 } }, { id: "place_on_field", params: { rank: 8 } }, { id: "lose_on_pass_limit", params: { limit: 5 } }, { id: "act_pass" }]),
       JSON.stringify(r.norm));
-    check("知らない札は使えない札へ移す", r.unk.cards.length === 0 && r.unk.unusable[0].id === "foo_bar");
-    check("壊れた文字列は理由を返して読み込まない", r.broken === "形が壊れている" && r.arr === "形が違う" && r.newer === "新しい版で作られたルールです" && r.long.startsWith("長すぎる"),
-      [r.broken, r.arr, r.newer, r.long].join(" / "));
-    check("文字列の \"2\" は数として使わず既定値にする", r.str === 1);
+    check("整えの報告に、直した値・捨てた調整値・捨てた要素が載る",
+      ["値を直した", "調整値を捨てた", "要素を捨てた"].every((k) => r.normReport.includes(k)), r.normReport.join(","));
+    check("知らない札は使えない札へ丸ごと移し、知っている札は使えない札から戻す",
+      r.unk.cards.length === 1 && r.unk.cards[0].id === "deal_all" && r.unk.unusable[0].memo === "残す" && r.unk.unusable[0].params.x === 1
+      && r.unkReport.includes("使えない札へ移した") && r.unkReport.includes("使えない札から戻した"), JSON.stringify(r.unk));
+    check("使えない札を含むルールは書き出し→読み込み→書き出しで同じ文字列になる", r.roundTrip);
+    const R = r.reasons;
+    check("断る理由が設計書のとおり", R.broken === "形が壊れている" && R.empty === "形が壊れている" && R.arr === "形が違う"
+      && R.newer === "新しい版で作られたルールです" && R.huge === "新しい版で作られたルールです" && R.half === "版が読めない" && R.zero === "版が読めない"
+      && R.long === "長すぎる(文字数)" && R.depth17 === "長すぎる(入れ子の深さ)" && R.cardsObj === "札の一覧の形が違う"
+      && R.many === "長すぎる(札の数)" && R.idLong === "長すぎる(識別名)" && R.priority === "長すぎる(文字数)", JSON.stringify(R));
+    check("境目の値(深さ16・識別名40文字)は受け入れ、先頭の目印と 1.0 も読める", r.ok16 && r.ok40 && r.bom && r.v10);
+    check("文字列の \"2\" と無限大は数として使わず既定値にする", r.str === 1 && r.inf === 1);
     check("書き出しは識別名の順で調整値を省略しない", r.order === '{"cards":[{"id":"act_pass"},{"id":"add_jokers","params":{"count":1}},{"id":"deal_all"}],"format_version":1,"unusable_cards":[]}', r.order);
+    const expectNums = '{"cards":[],"format_version":1,"unusable_cards":[{"b":{"B":4,"a":2,"y":1,"あ":3},"id":"a_str","s":"あ\\"\\\\/\\u0001"},{"id":"z_num","v":[1.0000000000000001e-1,1.0000000000000001e+300,2.5e+20,0,3,null]}]}';
+    // 1e300 は設計書の例では 1e+300 だが、決まり(有効数字17桁)に従うと 1.0000000000000001e+300 になる(README に記録)
+    check("数・文字列・鍵の順の書き方が設計書の決まりのとおり(無限大は null にして報告)", r.nums === expectNums && r.numsReport.includes("数を書けない値を null にした"), r.nums);
+
+    // 画面: 直した点の表示と、効かない札の知らせ
+    await page.evaluate(() => localStorage.setItem("rule_workshop_mock.rule",
+      '{"format_version":1,"cards":[{"id":"deal_all"},{"id":"act_play"},{"id":"act_pass"},{"id":"win_empty_hand"},{"id":"lose_on_pass_limit","params":{"limit":9}},{"id":"cut_eight","params":{"rank":8}}]}'));
+    await page.click("#btn-load");
+    const fixText = await page.textContent("#fix-report");
+    const unusableShown = await page.textContent("#unusable");
+    check("読み込んだときに「直した点」が工房に出る", fixText.includes("直した点") && fixText.includes("9 から 5") && fixText.includes("cut_eight"), fixText);
+    check("知らない札は「使えない札」として工房に出る", unusableShown.includes("cut_eight"));
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: path.join(SHOTS, "07_workshop_fix_report_desktop.jpg"), type: "jpeg", quality: 72 });
+    await page.evaluate(() => window.__mock.setSeed(3));
+    await page.click("#btn-battle");
+    await page.waitForSelector("#hand .pcard");
+    const logText = await page.textContent("#log");
+    check("対戦の始めに「1枚は効きません」と知らせる", logText.includes("1枚は効きません"), logText);
     await ctx.close();
   }
 

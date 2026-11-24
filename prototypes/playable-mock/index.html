@@ -119,6 +119,9 @@ h2 { font-size: 17px; margin: 14px 0 6px; }
 }
 .message { font-size: 14px; min-height: 1.4em; margin-top: 6px; }
 .message.bad { color: #FFD2A0; }
+.fix-report { margin-top: 6px; background: rgba(0,0,0,0.22); border-radius: 8px; padding: 6px 10px; font-size: 14px; }
+.fix-report .fix-title { font-weight: 800; }
+.fix-report ul { margin: 2px 0 0; padding-left: 1.2em; }
 
 .warn-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
 .warn-list li {
@@ -383,6 +386,7 @@ details.json pre {
         <button class="tag" id="btn-clear">全部外す</button>
       </div>
       <div class="message" id="ws-message" role="status"></div>
+      <div class="fix-report hidden" id="fix-report" aria-live="polite"></div>
     </div>
 
     <h2>ルール盤 <span class="note">札を押すと外れます。「−」「＋」で数を変えます</span></h2>
@@ -560,81 +564,172 @@ function el(tag, props, children) {
 }
 
 // ---------------------------------------------------------------
-// ルールの形式(design/gdd/rule-format.md)
+// ルールの形式(design/gdd/rule-format.md 2026-11-24 修正版)
 // 読み込みは JSON.parse だけで行い、任意の処理を動かす手段は使わない
+// 書き出しは JSON.stringify を使わず自前で組み立てる
 // ---------------------------------------------------------------
-const FORMAT_VERSION = 1;
-const MAX_TEXT = 4000, MAX_CARDS = 64, MAX_ID = 40;
+const FORMAT_VERSION = 1;          // 今の版
+const MIN_FORMAT_VERSION = 1;      // 読める最も古い版(最小対応版)
+const MAX_TEXT = 4000, MAX_DEPTH = 16, MAX_CARDS = 64, MAX_ID = 40;
+const MAX_SAFE_INT = 9007199254740992; // 2^53
 const STORAGE_KEY = "rule_workshop_mock.rule";
 
-function normalizeParam(x, p) {
-  if (typeof x !== "number" || !Number.isFinite(x)) return p.def;
-  const c = Math.min(p.max, Math.max(p.min, x));
-  return Math.sign(c) * Math.round(Math.abs(c)); // 0.5 は0から遠い方へ
-}
 function isPlainObject(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+const cpLength = (s) => [...s].length; // Unicode の符号位置の数
 
-/** 文字列からルールを読み込む。{ok, rule:{cards, unusable}, dropped} か {ok:false, reason} */
-function parseRule(text) {
-  if (typeof text !== "string" || text.length === 0) return { ok: false, reason: "形が壊れている" };
-  if ([...text].length > MAX_TEXT) return { ok: false, reason: "長すぎる(文字列が4000文字を超えている)" };
-  let data;
-  try { data = JSON.parse(text); } catch (e) { return { ok: false, reason: "形が壊れている" }; }
-  if (!isPlainObject(data)) return { ok: false, reason: "形が違う" };
-  const v = data.format_version;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 1) return { ok: false, reason: "版が読めない" };
-  if (v > FORMAT_VERSION) return { ok: false, reason: "新しい版で作られたルールです" };
-  const cards = data.cards === undefined ? [] : data.cards;
-  const unusable = data.unusable_cards === undefined ? [] : data.unusable_cards;
-  if (!Array.isArray(cards) || !Array.isArray(unusable)) return { ok: false, reason: "札の一覧の形が違う" };
-  if (cards.length + unusable.length > MAX_CARDS) return { ok: false, reason: "長すぎる(札が64枚を超えている)" };
-  const all = cards.concat(unusable);
-  for (const e of all) {
-    if (isPlainObject(e) && typeof e.id === "string" && [...e.id].length > MAX_ID) {
-      return { ok: false, reason: "長すぎる(識別名が40文字を超えている)" };
-    }
-  }
-  const out = { cards: [], unusable: [] };
-  const seen = new Set();
-  let dropped = 0;
-  for (const e of all) {
-    if (!isPlainObject(e) || typeof e.id !== "string" || e.id === "") { dropped++; continue; }
-    if (seen.has(e.id)) continue; // 同じ識別名は1つ目だけを残す
-    seen.add(e.id);
-    const def = CARD[e.id];
-    if (!def) {
-      const u = { id: e.id };
-      if (e.params !== undefined) u.params = e.params;
-      out.unusable.push(u);
+/** 式1 調整値の整え。{value, fixed: "丸めた"|"既定値にした"|null} */
+function normalizeParam(x, p) {
+  if (typeof x !== "number" || !Number.isFinite(x)) return { value: p.def, fixed: "既定値にした" };
+  const c = Math.min(p.max, Math.max(p.min, x));
+  const v = Math.sign(c) * Math.round(Math.abs(c)) + 0; // 0.5 は0から遠い方へ。-0 は 0 に
+  return { value: v, fixed: v === x ? null : "丸めた" };
+}
+
+/** 文字列の外にある [ と { の重なりの最大(解析の前に数える) */
+function nestingDepth(text) {
+  let depth = 0, max = 0, inStr = false, esc = false;
+  for (const ch of text) {
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
       continue;
     }
-    const c = { id: e.id };
-    if (def.param) {
-      const raw = isPlainObject(e.params) ? e.params[def.param.key] : undefined;
-      c.params = { [def.param.key]: normalizeParam(raw, def.param) };
-    }
-    out.cards.push(c);
+    if (ch === '"') inStr = true;
+    else if (ch === "[" || ch === "{") { depth++; if (depth > max) max = depth; }
+    else if (ch === "]" || ch === "}") depth--;
   }
-  return { ok: true, rule: out, dropped };
+  return max;
 }
 
-// 鍵を名前の順に並べ、空白なしで書く
-function stableStringify(v) {
-  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
-  if (isPlainObject(v)) {
-    return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + stableStringify(v[k])).join(",") + "}";
+/**
+ * 文字列からルールを読み込む。
+ * 成功: {ok:true, rule:{cards, unusable}, report:[{kind, ...}]}
+ * 失敗: {ok:false, reason}(読み込みの手順の上から最初に当てはまった理由だけ)
+ */
+function parseRule(text) {
+  if (typeof text !== "string") return { ok: false, reason: "形が壊れている" };
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);           // 手順1 先頭の目印
+  if (cpLength(text) > MAX_TEXT) return { ok: false, reason: "長すぎる(文字数)" };
+  if (nestingDepth(text) > MAX_DEPTH) return { ok: false, reason: "長すぎる(入れ子の深さ)" }; // 手順2
+  let data;
+  try { data = JSON.parse(text); } catch (e) { return { ok: false, reason: "形が壊れている" }; } // 手順3
+  if (!isPlainObject(data)) return { ok: false, reason: "形が違う" };   // 手順4
+  const v = data.format_version;                                       // 手順5 版の判定
+  if (typeof v !== "number" || !Number.isFinite(v) || !Number.isInteger(v) || v < MIN_FORMAT_VERSION) {
+    return { ok: false, reason: "版が読めない" };
   }
-  return JSON.stringify(v);
+  if (v > FORMAT_VERSION) return { ok: false, reason: "新しい版で作られたルールです" };
+  // (最小対応版以上で今の版より古い場合の移し替えは、版が1つしかないので今は無い)
+  const cards = data.cards === undefined ? [] : data.cards;             // 手順6
+  const unusable = data.unusable_cards === undefined ? [] : data.unusable_cards;
+  if (!Array.isArray(cards) || !Array.isArray(unusable)) return { ok: false, reason: "札の一覧の形が違う" };
+  if (cards.length + unusable.length > MAX_CARDS) return { ok: false, reason: "長すぎる(札の数)" }; // 手順7
+  const all = cards.concat(unusable);
+  for (const e of all) {
+    if (isPlainObject(e) && typeof e.id === "string" && cpLength(e.id) > MAX_ID) return { ok: false, reason: "長すぎる(識別名)" };
+  }
+
+  const out = { cards: [], unusable: [] };
+  const report = [];
+  const seen = new Set();
+  all.forEach((e, index) => {
+    const fromUnusable = index >= cards.length;
+    if (!isPlainObject(e) || typeof e.id !== "string" || e.id === "") { report.push({ kind: "要素を捨てた", index, why: "壊れている" }); return; }
+    if (seen.has(e.id)) { report.push({ kind: "要素を捨てた", index, why: "重複" }); return; }
+    seen.add(e.id);
+    const def = Object.prototype.hasOwnProperty.call(CARD, e.id) ? CARD[e.id] : null;
+    if (!def) {
+      out.unusable.push(e); // 解析した値として丸ごと持つ
+      if (!fromUnusable) report.push({ kind: "使えない札へ移した", id: e.id });
+      return;
+    }
+    if (fromUnusable) report.push({ kind: "使えない札から戻した", id: e.id });
+    const c = { id: e.id };
+    const given = isPlainObject(e.params) ? e.params : {};
+    if (def.param) {
+      const key = def.param.key;
+      const has = Object.prototype.hasOwnProperty.call(given, key);
+      const n = normalizeParam(has ? given[key] : undefined, def.param);
+      c.params = { [key]: n.value };
+      if (n.fixed) report.push({ kind: "値を直した", id: e.id, key, from: has ? given[key] : "(なし)", to: n.value, how: n.fixed });
+    }
+    for (const k of Object.keys(given)) {
+      if (!def.param || k !== def.param.key) report.push({ kind: "調整値を捨てた", id: e.id, key: k });
+    }
+    out.cards.push(c);
+  });
+  return { ok: true, rule: out, report };
 }
-/** 決まった形で書き出す。札は識別名の順、調整値は省略しない */
-function serializeRule(rule) {
+
+// ----- 書き出し(自前) -----
+/** 文字の番号(符号位置)の順に比べる */
+function cmpCodePoint(a, b) {
+  const A = [...a], B = [...b];
+  for (let i = 0; i < Math.min(A.length, B.length); i++) {
+    const d = A[i].codePointAt(0) - B[i].codePointAt(0);
+    if (d !== 0) return d;
+  }
+  return A.length - B.length;
+}
+function writeString(s) {
+  let o = '"';
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    if (ch === '"' || ch === "\\") o += "\\" + ch;
+    else if (c <= 0x1F) o += "\\u" + c.toString(16).padStart(4, "0");
+    else o += ch;
+  }
+  return o + '"';
+}
+function writeNumber(x, ctx) {
+  if (!Number.isFinite(x)) { ctx.report.push({ kind: "数を書けない値を null にした", id: ctx.id }); return "null"; }
+  if (Number.isInteger(x) && Math.abs(x) <= MAX_SAFE_INT) return String(x + 0); // -0 は 0
+  // 有効数字17桁の指数の形。仮数の末尾の0と小数点を取り除く。指数には必ず符号
+  const [m, e] = x.toExponential(16).split("e");
+  const mant = m.includes(".") ? m.replace(/0+$/, "").replace(/\.$/, "") : m;
+  const exp = (e[0] === "-" ? "-" : "+") + String(Math.abs(parseInt(e, 10)));
+  return mant + "e" + exp;
+}
+function writeValue(v, ctx) {
+  if (v === null) return "null";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (typeof v === "number") return writeNumber(v, ctx);
+  if (typeof v === "string") return writeString(v);
+  if (Array.isArray(v)) return "[" + v.map((x) => writeValue(x, ctx)).join(",") + "]";
+  return "{" + Object.keys(v).sort(cmpCodePoint).map((k) => writeString(k) + ":" + writeValue(v[k], ctx)).join(",") + "}";
+}
+/** 決まった形で書き出す。{text, report}。札は識別名の順、調整値は省略しない */
+function serializeRuleWithReport(rule) {
+  const byId = (a, b) => cmpCodePoint(a.id, b.id);
   const cards = rule.cards.map((c) => {
     const def = CARD[c.id];
     const o = { id: c.id };
     if (def.param) o.params = { [def.param.key]: c.params[def.param.key] };
     return o;
-  }).sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return stableStringify({ format_version: FORMAT_VERSION, cards, unusable_cards: rule.unusable });
+  }).sort(byId);
+  const report = [];
+  const parts = [];
+  parts.push('"cards":' + writeValue(cards, { report, id: null }));
+  parts.push('"format_version":' + FORMAT_VERSION);
+  parts.push('"unusable_cards":[' + rule.unusable.slice().sort(byId).map((u) => writeValue(u, { report, id: u.id })).join(",") + "]");
+  return { text: "{" + parts.join(",") + "}", report };
+}
+function serializeRule(rule) { return serializeRuleWithReport(rule).text; }
+
+/** 整えの報告を1行の文に直す(工房の「直した点」) */
+function describeReport(r) {
+  const name = (id) => (CARD[id] ? `「${CARD[id].name}」` : `「${id}」`);
+  const label = (id, key) => (CARD[id] && CARD[id].param && CARD[id].param.key === key ? CARD[id].param.label : `調整値「${key}」`);
+  switch (r.kind) {
+    case "値を直した": return `${name(r.id)}の${label(r.id, r.key)}を ${typeof r.from === "string" ? r.from : JSON.stringify(r.from)} から ${r.to} に${r.how === "丸めた" ? "丸めた" : "した(既定値)"}`;
+    case "調整値を捨てた": return `${name(r.id)}の${label(r.id, r.key)}を捨てた`;
+    case "要素を捨てた": return `${r.index + 1}番目の要素を捨てた(${r.why})`;
+    case "使えない札へ移した": return `${name(r.id)}は知らない札なので使えない札へ移した`;
+    case "使えない札から戻した": return `${name(r.id)}を使えない札から戻した`;
+    case "数を書けない値を null にした": return `${name(r.id)}の中の数を書けない値を null にした`;
+  }
+  return r.kind;
 }
 
 // ---------------------------------------------------------------
@@ -1150,13 +1245,25 @@ function loadPreset(p) {
   state.board = presetCards(p);
   state.unusable = [];
   state.basePreset = p.name;
+  showFixReport([]);
   setMessage(`「${p.name}」のひな形を並べました`);
   renderWorkshop();
 }
 
+/** 整えの報告を「直した点」として工房に出す。空なら隠す */
+function showFixReport(report) {
+  const box = $("fix-report");
+  box.replaceChildren();
+  if (!report || report.length === 0) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  box.appendChild(el("div", { class: "fix-title", text: "直した点" }));
+  box.appendChild(el("ul", {}, report.map((r) => el("li", { text: describeReport(r) }))));
+}
+
 function saveRule() {
-  const text = serializeRule({ cards: state.board, unusable: state.unusable });
-  if ([...text].length > MAX_TEXT) { setMessage("保存できません: 長すぎる", true); return; }
+  const { text, report } = serializeRuleWithReport({ cards: state.board, unusable: state.unusable });
+  if (cpLength(text) > MAX_TEXT) { setMessage("保存できません: 長すぎる(文字数)", true); return; }
+  showFixReport(report);
   try {
     localStorage.setItem(STORAGE_KEY, text);
     setMessage(`保存しました(${text.length}文字)`);
@@ -1173,7 +1280,8 @@ function loadRule() {
   state.board = r.rule.cards;
   state.unusable = r.rule.unusable;
   state.basePreset = null;
-  setMessage("読み込みました" + (r.dropped ? `(壊れた札を${r.dropped}枚外しました)` : ""));
+  setMessage("読み込みました" + (r.report.length ? `(直した点 ${r.report.length}件)` : ""));
+  showFixReport(r.report);
   renderWorkshop();
 }
 
@@ -1198,7 +1306,9 @@ function startBattle() {
   const engine = new Engine(ruleCards, 4, newSeed());
   battle = {
     engine, ruleIds: ruleCards.map((c) => c.id), title: ruleTitle(),
-    current: -1, moves: [], selected: null, logs: [], firstTurnMeasured: false, timer: null, ended: false,
+    current: -1, moves: [], selected: null, firstTurnMeasured: false, timer: null, ended: false,
+    // 効かない札(使えない札)の枚数を対戦の始めに必ず知らせる(rule-format.md 基本の決まり10)
+    logs: state.unusable.length ? [`${state.unusable.length}枚は効きません(使えない札)`] : [],
   };
   $("screen-workshop").classList.add("hidden");
   $("screen-battle").classList.remove("hidden");
@@ -1544,7 +1654,7 @@ function init() {
   }
   $("btn-save").addEventListener("click", saveRule);
   $("btn-load").addEventListener("click", loadRule);
-  $("btn-clear").addEventListener("click", () => { state.board = []; state.unusable = []; setMessage("全部外しました"); renderWorkshop(); });
+  $("btn-clear").addEventListener("click", () => { state.board = []; state.unusable = []; showFixReport([]); setMessage("全部外しました"); renderWorkshop(); });
   $("btn-battle").addEventListener("click", startBattle);
   $("btn-fix").addEventListener("click", goFix);
   $("btn-speed").addEventListener("click", () => {
@@ -1584,7 +1694,7 @@ window.__mock = {
     }
     return out;
   },
-  parseRule, serializeRule,
+  parseRule, serializeRule, serializeRuleWithReport,
   currentRuleText: () => serializeRule({ cards: state.board, unusable: state.unusable }),
   battleResult: () => (battle && battle.ended ? battle.engine.result : null),
 };
