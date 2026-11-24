@@ -53,6 +53,7 @@ entities:
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
+      - design/gdd/rule-format.md
       - design/gdd/rule-card-definition.md
     attributes:
       kind: rule_card
@@ -97,6 +98,7 @@ entities:
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
+      - design/gdd/rule-format.md
       - design/gdd/rule-card-definition.md
     attributes:
       kind: rule_card
@@ -147,6 +149,7 @@ entities:
     status: active
     source: design/gdd/rule-card-definition.md
     referenced_by:
+      - design/gdd/rule-format.md
       - design/gdd/rule-card-definition.md
     attributes:
       kind: rule_card
@@ -342,6 +345,15 @@ constants:
     value: 1
     note: "raise only when the format shape changes"
     added: 2026-11-23
+  - name: rule_format_min_version
+    status: active
+    source: design/gdd/rule-format.md
+    referenced_by:
+      - design/gdd/rule-format.md
+    value: 1
+    range: "1-rule_format_version"
+    note: "older versions are refused as unreadable"
+    added: 2026-11-23
   - name: rule_text_max_chars
     status: active
     source: design/gdd/rule-format.md
@@ -349,6 +361,15 @@ constants:
       - design/gdd/rule-format.md
     value: 4000
     range: "2000-8000"
+    added: 2026-11-23
+  - name: rule_max_nesting_depth
+    status: active
+    source: design/gdd/rule-format.md
+    referenced_by:
+      - design/gdd/rule-format.md
+    value: 16
+    range: "8-64"
+    note: "checked by scanning before JSON parse; top-level object counts as 1"
     added: 2026-11-23
   - name: rule_max_cards
     status: active
