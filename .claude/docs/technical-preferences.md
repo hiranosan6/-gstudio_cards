@@ -7,7 +7,7 @@
 
 - **Engine**: Godot 4.7.1
 - **Language**: GDScript
-- **Rendering**: Compatibility (2D, Web export target)
+- **Rendering**: Compatibility (2D). Mobile renderer with Metal is an option on macOS — decide in an ADR (unverified for 4.7)
 - **Physics**: None (card game — no physics simulation)
 
 ## Input & Platform
@@ -15,12 +15,12 @@
 <!-- Written by /setup-engine. Read by /ux-design, /ux-review, /test-setup, /team-ui, and /dev-story -->
 <!-- to scope interaction specs, test helpers, and implementation to the correct input methods. -->
 
-- **Target Platforms**: Web (browser on PC and smartphone)
-- **Input Methods**: Mouse, Touch
+- **Target Platforms**: macOS desktop app (changed from Web on 2026-11-25). Distribution channel not decided yet
+- **Input Methods**: Mouse, Trackpad, Keyboard
 - **Primary Input**: Mouse
 - **Gamepad Support**: None
-- **Touch Support**: Partial
-- **Platform Notes**: No hover-only interactions (must work on touch). Keep the initial download small so play starts quickly (pillar "3秒で試せる"). C# web export is unverified for Godot 4.x — do not introduce C#.
+- **Touch Support**: None
+- **Platform Notes**: Hover tooltips allowed, but the same info must also be reachable by click. Minimum click target 32px. Drag-and-drop for rule cards (click-to-place kept). Startup to workshop screen target 3s. macOS distribution needs Apple code signing and notarization (requires a Mac). Language stays GDScript (user decision).
 
 ## Naming Conventions
 

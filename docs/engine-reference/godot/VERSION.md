@@ -32,9 +32,9 @@ once those hosts are reachable, and verify uncertain 4.7 APIs with WebSearch.
 
 ## Project-Specific Notes
 
-- Target is Web export with the Compatibility renderer.
-- C# web export: the 4.4 docs state C# projects cannot be exported to the web.
-  Status in 4.7 is unverified, so this project uses GDScript only.
+- Target is a macOS desktop app (changed from Web on 2026-11-25). Renderer: Compatibility for now; Metal-based renderer to be evaluated in an ADR.
+- Language: GDScript only (user decision; the earlier C#-on-web concern no longer applies).
+- macOS export: signing/notarization require a Mac with Xcode tools; unsigned builds can be produced on Linux for testing (verify for 4.7).
 
 ## Verified Sources
 
